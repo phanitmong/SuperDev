@@ -58,6 +58,7 @@ import terminalBg from './assets/terminal-bg.jpg'
 import { errText, cssUrl } from './util'
 import iconUrl from './assets/icon.png'
 import bannerUrl from './assets/banner.jpg'
+import UpdateBanner from './components/UpdateBanner'
 
 // Pages are loaded when first opened, so the window appears sooner and stays lighter.
 const Users = lazy(() => import('./pages/Users'))
@@ -691,8 +692,16 @@ export default function App() {
             <Shell key={session.user.id} me={session.user} biometric={session.biometric} dark={dark} themeMode={themeMode} setThemeMode={setThemeMode} />
             {!session.locked && <Approvals key={'a' + session.user.id} me={session.user} />}
             {session.locked && <LockScreen name={session.user.displayName} />}
+            {!session.locked && <UpdateBanner />}
+            {session.reconnecting && !session.locked && (
+              <div className="reconnect-bar" role="status">
+                <span className="reconnect-dot" /> Connection to the service lost. Connecting again…
+              </div>
+            )}
             <CloseConfirm />
           </>
+        ) : session.reconnecting ? (
+          <div className="reconnect-start" role="status">Signing you back in…</div>
         ) : <Login session={session} />}</AntApp>
     </ConfigProvider>
   )

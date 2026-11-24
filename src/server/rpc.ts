@@ -545,7 +545,7 @@ async function authCall(conn: Conn, method: string, args: any[]): Promise<unknow
     if (/is locked for/.test(error)) guard.accountLocked(user, conn.ip)
   }
   // Before the password is even looked at: an address outside the list cannot guess passwords either.
-  if ((method === 'auth:login' || method === 'auth:totp' || method === 'auth:setPassword') && !guard.addressAllowed(conn.ip)) {
+  if ((method === 'auth:login' || method === 'auth:totp' || method === 'auth:setPassword' || method === 'auth:resume') && !guard.addressAllowed(conn.ip)) {
     throttle(conn.ip)
     const name = String(method === 'auth:login' ? (args[0] ?? '') : '').trim().toLowerCase().slice(0, 40)
     audit.record({ user: name || '(unknown)', role: '', ip: conn.ip, action: 'auth:login', ok: false, error: 'address not allowed' })
@@ -602,6 +602,39 @@ async function authCall(conn: Conn, method: string, args: any[]): Promise<unknow
       if (!conn.passwordUserId) throw new RpcError('Sign in first.', 'unauthorized')
       auth.setPassword(conn.passwordUserId, String(args[0] ?? ''))
       return finish(conn, conn.passwordUserId)
+    }
+    // The app lost its connection (sleep, network change, a restart of the service) and comes back with its session.
+    case 'auth:resume': {
+      const tok = String(args[0] ?? '')
+      const gone = (): never => {
+        throw new RpcError('Your session has ended. Sign in again.', 'unauthorized')
+      }
+      if (!/^[0-9a-f]{64}$/.test(tok)) gone()
+      const s = auth.useSession(tok)
+      if (!s) {
+        throttle(conn.ip)
+        gone()
+      }
+      let u: ReturnType<typeof auth.getUser>
+      try {
+        u = auth.getUser(s!.userId)
+      } catch {
+        auth.endSession(tok)
+        return gone()
+      }
+      if (u.disabled) {
+        auth.endSession(tok)
+        gone()
+      }
+      conn.token = tok
+      conn.pendingUserId = undefined
+      conn.passwordUserId = undefined
+      // A session picked up from another address is worth a line in the audit log.
+      if (s!.ip !== conn.ip) {
+        audit.record({ user: u.username, role: u.role, ip: conn.ip, action: 'auth:resume', ok: true, target: `session from ${s!.ip}` })
+        s!.ip = conn.ip
+      }
+      return { id: u.id, username: u.username, displayName: u.displayName, role: u.role }
     }
     case 'auth:me': {
       const u = actorOf(conn)

@@ -226,8 +226,39 @@ upload() {
   WHY=$(explain "$(cat "$B")")
   unlink "$H"; unlink "$B"
   if [ -z "$LOC" ]; then say "Google did not accept the upload of $N: $WHY"; FAILED=$((FAILED+1)); LASTWHY="$WHY"; return 1; fi
-  ID=$(curl -sS --max-time 14400 -X PUT -H "$AUTH" -H 'Content-Type: application/gzip' --upload-file "$F" "$LOC" 2>>"$LOG" | field id)
-  if [ -z "$ID" ]; then say "The upload of $N did not finish"; FAILED=$((FAILED+1)); return 1; fi
+  # Send the file; when the connection drops or Google has a hiccup, ask Google how much arrived and send the rest.
+  SIZE=$(stat -c %s "$F"); OFF=0; ID=""; TRY=0; WHY=""
+  B=$(mktemp); E=$(mktemp)
+  while [ -z "$ID" ] && [ "$TRY" -lt 5 ]; do
+    TRY=$((TRY+1))
+    if [ "$OFF" -eq 0 ]; then
+      CODE=$(curl -sS --max-time 14400 -o "$B" -w '%{http_code}' -X PUT -H "$AUTH" -H 'Content-Type: application/gzip' --upload-file "$F" "$LOC" 2>"$E")
+    else
+      CODE=$(tail -c +$((OFF+1)) "$F" | curl -sS --max-time 14400 -o "$B" -w '%{http_code}' -X PUT -H "$AUTH" -H "Content-Length: $((SIZE-OFF))" -H "Content-Range: bytes $OFF-$((SIZE-1))/$SIZE" -H "Transfer-Encoding:" --upload-file - "$LOC" 2>"$E")
+    fi
+    ID=$(field id < "$B")
+    [ -n "$ID" ] && break
+    NET=$(tr '\\n' ' ' < "$E" | cut -c1-200)
+    case "$CODE" in
+      4[0-9][0-9]) WHY="Google refused it (HTTP $CODE): $(explain "$(cat "$B")")"; break ;;
+      000|1[0-9][0-9]) WHY="The connection to Google broke: \${NET:-no answer}" ;;
+      *) WHY="Google answered HTTP $CODE: $(explain "$(cat "$B")")" ;;
+    esac
+    say "Upload of $N stopped (try $TRY): $WHY"
+    sleep $((TRY*10))
+    # How much did Google keep? 308 + Range = continue from there; 200/201 = it is there after all.
+    HDR=$(mktemp)
+    CODE=$(curl -sS --max-time 60 -D "$HDR" -o "$B" -w '%{http_code}' -X PUT -H "$AUTH" -H "Content-Length: 0" -H "Content-Range: bytes */$SIZE" "$LOC" 2>>"$LOG")
+    case "$CODE" in
+      200|201) ID=$(field id < "$B") ;;
+      308) R=$(tr -d '\\r' < "$HDR" | sed -n 's/^[Rr]ange: *bytes=0-\\([0-9]*\\).*/\\1/p' | head -1); if [ -n "$R" ]; then OFF=$((R+1)); else OFF=0; fi; say "Continuing $N from $((OFF/1048576)) MB of $((SIZE/1048576)) MB" ;;
+      404|410) unlink "$HDR"; WHY="$WHY (Google dropped the upload session, so it starts again at the next run)"; break ;;
+      *) OFF=0 ;;
+    esac
+    unlink "$HDR"
+  done
+  unlink "$B"; unlink "$E"
+  if [ -z "$ID" ]; then say "The upload of $N did not finish: \${WHY:-Google gave no reason}"; FAILED=$((FAILED+1)); LASTWHY="\${WHY:-The upload of $N did not finish}"; return 1; fi
   echo "$N|$ID|$(date +%s)" >> "$S/uploaded.list"
   SENT=$((SENT+1))
   say "Uploaded $N ($(du -h "$F" | cut -f1))"

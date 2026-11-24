@@ -53,3 +53,28 @@ Only the compiled app (`out/`) and the three packages it needs while running: `s
 ## The team service
 
 `npm run server:build` makes one file, `dist-server/server.js`, that runs with Node 20 or later. See `deploy/` and the README for running it on a server.
+
+## Updating the installed apps (from your own service)
+
+Installed apps (1.1.0 and later) ask the service for a newer version after sign-in and every 6 hours. When one
+exists they download it in the background, check its SHA-256, and show "Restart to update". Nothing is public:
+the files are only handed to signed-in apps.
+
+1. Raise `version` in `package.json` (for example 1.1.0 → 1.2.0). The app compares this number.
+2. Build: `npm run dist:mac` (makes the .dmg for new installs and the .zip the updater uses) and the Windows
+   .exe (`npm run dist:win` on Windows, or the GitHub Actions run).
+3. Put the files on the service machine in one folder, then publish them as the service's user:
+
+   ```
+   sudo -u superdevops env SUPERDEVOPS_DATA=/var/lib/superdevops-service \
+     node /opt/superdevops/server.js app-release /tmp/apsara-release 1.2.0 "What is new, one line"
+   ```
+
+   Files it looks for: `ApsaraPanel-mac-arm64.zip`, `ApsaraPanel-mac-x64.zip`, `ApsaraPanel-win-x64.exe`,
+   `ApsaraPanel-linux-x86_64.AppImage` (any you have). They are copied to `app-updates/<version>/` in the
+   service's data folder; the version before is kept, older ones are removed.
+
+How each system installs: Windows runs the installer silently and opens the app again; macOS replaces the
+.app it was opened from (it must be in a folder the person can write to, such as /Applications for an admin
+account) and opens it; Linux replaces the AppImage. Apps before 1.1.0 cannot update themselves: install
+1.1.0 by hand once.

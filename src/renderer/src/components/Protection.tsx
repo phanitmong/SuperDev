@@ -19,6 +19,8 @@ export default function Protection() {
   const [alertDanger, setAlertDanger] = useState(true)
   const [approvals, setApprovals] = useState(false)
   const [recordingDays, setRecordingDays] = useState(90)
+  const [idleHours, setIdleHours] = useState(8)
+  const [maxDays, setMaxDays] = useState(7)
   const [confirming, setConfirming] = useState(false)
   const [testing, setTesting] = useState(false)
 
@@ -30,6 +32,8 @@ export default function Protection() {
     setAlertDanger(v.alertDanger)
     setApprovals(v.approvals)
     setRecordingDays(v.recordingDays)
+    setIdleHours(v.sessionIdleHours)
+    setMaxDays(v.sessionMaxDays)
     setToken('')
     setRemoveToken(false)
   }
@@ -51,7 +55,7 @@ export default function Protection() {
   if (!saved) return <Spin />
 
   const dirty =
-    ips.join(',') !== saved.allowedIps.join(',') || token !== '' || removeToken || chat.trim() !== saved.telegramChat || alertSignIn !== saved.alertSignIn || alertDanger !== saved.alertDanger || approvals !== saved.approvals || recordingDays !== saved.recordingDays
+    ips.join(',') !== saved.allowedIps.join(',') || token !== '' || removeToken || chat.trim() !== saved.telegramChat || alertSignIn !== saved.alertSignIn || alertDanger !== saved.alertDanger || approvals !== saved.approvals || recordingDays !== saved.recordingDays || idleHours !== saved.sessionIdleHours || maxDays !== saved.sessionMaxDays
   const telegramReady = saved.telegramSet && !!saved.telegramChat
   const hidden = saved.yourAddress === '127.0.0.1' || saved.yourAddress === '::1'
 
@@ -171,6 +175,19 @@ export default function Protection() {
         </div>
       </div>
 
+      <div className="guard-row">
+        <div className="guard-head">
+          <strong>How long a sign-in lasts</strong>
+        </div>
+        <p className="guard-about">
+          The app stays signed in through sleep, a network change or a restart of the service, and remembers the sign-in on each computer (kept in the system's keychain; on a Mac with Touch ID it opens locked). It signs out after this long without use, and asks for the password and authenticator code again at least this often.
+        </p>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <InputNumber min={1} max={168} value={idleHours} onChange={(v) => setIdleHours(v ?? 8)} addonBefore="Sign out after" addonAfter="hours unused" style={{ width: 300 }} aria-label="Hours without use before signing out" />
+          <InputNumber min={1} max={90} value={maxDays} onChange={(v) => setMaxDays(v ?? 7)} addonBefore="Sign in again every" addonAfter="days" style={{ width: 300 }} aria-label="Days before signing in again" />
+        </div>
+      </div>
+
       <div className="guard-row" style={{ borderBottom: 0, paddingBottom: 0 }}>
         <div className="guard-head">
           <strong>Terminal recordings</strong>
@@ -186,7 +203,7 @@ export default function Protection() {
         okText="Save"
         onCancel={() => setConfirming(false)}
         onProof={async (proof) => {
-          const next = await window.api.guard.save({ allowedIps: ips, telegramToken: removeToken ? '' : token || undefined, telegramChat: chat.trim(), alertSignIn, alertDanger, approvals, recordingDays }, proof)
+          const next = await window.api.guard.save({ allowedIps: ips, telegramToken: removeToken ? '' : token || undefined, telegramChat: chat.trim(), alertSignIn, alertDanger, approvals, recordingDays, sessionIdleHours: idleHours, sessionMaxDays: maxDays }, proof)
           setConfirming(false)
           show(next)
           message.success('Protection settings saved.')

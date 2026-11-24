@@ -202,7 +202,7 @@ export default function Backups({ project }: { project: Project }) {
               name="repo"
               label="Git repository"
               rules={[{ required: true, message: 'Enter the repository URL' }]}
-              extra="Use an empty private repository. Add the server SSH key to it as a deploy key with write access."
+              extra="Use an empty private repository and its SSH address (git@github.com:you/backup.git); a GitHub, GitLab or Bitbucket https address is changed to SSH by itself. Add the server key (Server key) to the repository as a deploy key with write access."
             >
               <Input className="mono" placeholder="git@github.com:you/backups.git" spellCheck={false} />
             </Form.Item>

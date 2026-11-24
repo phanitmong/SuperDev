@@ -34,14 +34,14 @@ export const ROLE_LABELS: Record<Role, string> = {
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   admin: ['view', 'deploy', 'ops', 'data', 'danger', 'files', 'terminal', 'projects', 'admin'],
   developer: ['view', 'deploy', 'data', 'webfiles', 'projects'],
-  it_support: ['view', 'ops', 'data', 'danger', 'files', 'terminal', 'projects'],
+  it_support: ['view', 'deploy', 'ops', 'data', 'danger', 'files', 'terminal', 'projects'],
   viewer: ['view']
 }
 
 export const ROLE_SUMMARY: Record<Role, string> = {
   admin: 'Everything on every server shared with the team or with chosen people, plus accounts and the audit log. Private servers of other people stay hidden.',
   developer: 'Add own servers and share them. Sites: create, deploy, roll back, maintenance, HTTPS. PM2 apps and cron tasks. Create databases and back them up. File manager inside /www/wwwroot only. No terminal, firewall or server settings.',
-  it_support: 'Add own servers and share them. Server operations: firewall, PHP, Redis, backups, alerts, HTTPS, installs, database backup / restore / delete, PM2 and cron, the file manager on the whole server, and the terminal. Cannot deploy code.',
+  it_support: 'Add own servers and share them. Server operations: firewall, PHP, Redis, backups, alerts, HTTPS, installs, database backup / restore / delete, PM2 and cron, the file manager on the whole server, and the terminal. Sites: create, deploy, preview, roll back, maintenance.',
   viewer: 'Read only on servers shared with them: status, monitoring, lists and logs.'
 }
 
@@ -118,6 +118,8 @@ export interface SessionState {
   serverUrl: string
   lastUsername: string
   connected: boolean
+  /** The connection dropped and the app is connecting again; the session is kept. */
+  reconnecting?: boolean
   user: SessionUser | null
   /** The app is locked and waits for the fingerprint. */
   locked: boolean
@@ -157,6 +159,10 @@ export interface GuardView {
   approvals: boolean
   /** Terminal recordings older than this many days are removed. 0 keeps them for ever. */
   recordingDays: number
+  /** A session ends after this many hours without use (1-168). */
+  sessionIdleHours: number
+  /** Everyone signs in again at least this often, in days (1-90). */
+  sessionMaxDays: number
   /** Why the last alert could not be delivered, if it could not. */
   telegramError?: string
 }
@@ -171,6 +177,8 @@ export interface GuardInput {
   approvals: boolean
   /** Left out: unchanged. */
   recordingDays?: number
+  sessionIdleHours?: number
+  sessionMaxDays?: number
 }
 
 export interface ApprovalRequest {
@@ -190,4 +198,18 @@ export interface ApprovalWaiting {
   action: string
   project?: string
   target?: string
+}
+
+/** The desktop app's own update, offered by the team service. */
+export interface UpdateState {
+  /** Version of this app. */
+  current: string
+  /** A newer version the service offers. */
+  available?: string
+  notes?: string
+  /** 0-100 while downloading. */
+  progress?: number
+  /** Downloaded and checked: "Restart to update" can be offered. */
+  ready?: boolean
+  error?: string
 }

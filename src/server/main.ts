@@ -28,6 +28,7 @@ import * as storeApi from '../main/store'
 import * as auth from './auth'
 import * as audit from './audit'
 import * as guard from './guard'
+import * as updates from './updates'
 import * as rpc from './rpc'
 import * as engines from './engines'
 import { runWorker } from './worker'
@@ -69,6 +70,13 @@ function setup(): void {
   auth.configureAuth({ dir: DATA, encrypt, decrypt })
   audit.configureAudit(DATA)
   guard.configureGuard({ dir: DATA, encrypt, decrypt })
+  updates.configureUpdates(DATA)
+  // Read the session lengths before any saved session is looked at.
+  try {
+    guard.view('')
+  } catch {
+    /* reported when an admin opens Protection */
+  }
   rpc.configureRpc(DATA)
   engines.configureEngines(DATA)
 }
@@ -112,6 +120,16 @@ function cli(cmd: string, args: string[]): boolean {
     console.log('Every address may sign in again and second-admin approval is off. Restart the service, then set them again under Team → Protection.')
     return true
   }
+  if (cmd === 'app-release') {
+    if (!args[0] || !args[1]) {
+      console.error('Usage: app-release <folder with ApsaraPanel-*.zip/.exe> <version, e.g. 1.1.0> [what is new]')
+      process.exit(1)
+    }
+    const r = updates.publish(args[0], args[1], args.slice(2).join(' '))
+    audit.record({ user: who, role: 'console', ip: 'local', action: 'app:release', target: `${r.version}: ${Object.keys(r.files).join(', ')}`, ok: true })
+    console.log(`App ${r.version} published for ${Object.keys(r.files).join(', ')}. Signed-in apps offer the update within a few minutes.`)
+    return true
+  }
   if (cmd === 'verify-audit') {
     const v = audit.verify()
     console.log(v.ok ? `Audit log intact (${v.entries} entries).` : `Audit log has been altered: the chain breaks at entry ${v.brokenAt} of ${v.entries}.`)
@@ -140,6 +158,8 @@ function json(res: ServerResponse, status: number, body: unknown): void {
 async function http(req: IncomingMessage, res: ServerResponse): Promise<void> {
   const url = new URL(req.url ?? '/', 'http://x')
   if (url.pathname === '/healthz') return json(res, 200, { ok: true, service: 'superdevops' })
+  // New versions of the desktop app, for signed-in apps only.
+  if (updates.handle(req, res, url.pathname, (t) => !!auth.useSession(t) && guard.addressAllowed(clientIp(req)))) return
 
   // Alerts from managed servers, forwarded with the team's Telegram bot.
   if (url.pathname === '/relay/alert' && req.method === 'POST') {
@@ -260,6 +280,7 @@ function serve(): void {
     if (!auth.hasUsers()) console.log('No accounts yet. Create the first admin with:  node server.js create-admin <username>')
   })
   const stop = (): void => {
+    auth.flushSessions()
     server.close()
     process.exit(0)
   }

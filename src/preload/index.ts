@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ApprovalRequest, ApprovalWaiting, AuditPage, AuditQuery, GuardInput, GuardView, LoginStep, SessionState, TeamMember, TeamUser, TeamUserInput } from '@shared/team'
+import type { UpdateState, ApprovalRequest, ApprovalWaiting, AuditPage, AuditQuery, GuardInput, GuardView, LoginStep, SessionState, TeamMember, TeamUser, TeamUserInput } from '@shared/team'
 import type {
   AlertConfig,
   FileListing,
@@ -150,6 +150,13 @@ const api = {
     /** A colleague (or a refused change) altered the shared servers or sites. */
     onStoreChanged: (cb: () => void) => listen('store:changed', cb),
     onStoreError: (cb: (p: { message: string }) => void) => listen('store:error', cb)
+  },
+  update: {
+    state: () => invoke<UpdateState>('update:state'),
+    check: () => invoke<UpdateState>('update:check'),
+    /** Quits the app, installs the downloaded version and starts it. */
+    install: () => invoke<void>('update:install'),
+    onState: (cb: (s: UpdateState) => void) => listen('update:state', cb)
   },
   auth: {
     login: (username: string, password: string) => invoke<LoginStep>('auth:login', username, password),

@@ -1,5 +1,5 @@
 // Accounts, passwords, Google Authenticator codes (TOTP), lockout and sessions.
-import { createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, randomBytes, randomUUID, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { LoginStep, Role, SessionUser, TeamUser, TeamUserInput } from '@shared/team'
@@ -36,7 +36,8 @@ export interface Session {
 
 export const MAX_FAILED = 5
 export const LOCK_MINUTES = 15
-const SESSION_IDLE_MS = 60 * 60 * 1000
+// How long a session lasts; set from Team → Protection (guard.ts calls setSessionLimits).
+let SESSION_IDLE_MS = 8 * 60 * 60 * 1000
 // Development sign-in (see rpc.setDevNo2fa): wrong passwords never lock an account.
 let noLock = false
 export function setNoLock(on: boolean): void {
@@ -46,7 +47,11 @@ function isLocked(u: { lockedUntil?: number }): boolean {
   return !noLock && !!u.lockedUntil && u.lockedUntil > Date.now()
 }
 
-const SESSION_MAX_MS = 12 * 60 * 60 * 1000
+let SESSION_MAX_MS = 7 * 24 * 60 * 60 * 1000
+export function setSessionLimits(idleHours: number, maxDays: number): void {
+  SESSION_IDLE_MS = idleHours * 60 * 60 * 1000
+  SESSION_MAX_MS = maxDays * 24 * 60 * 60 * 1000
+}
 const SCRYPT = { N: 32768, r: 8, p: 1, maxmem: 128 * 1024 * 1024 }
 const RE_USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/
 
@@ -54,7 +59,55 @@ let dir = ''
 let enc: (v: string) => string = (v) => v
 let dec: (v: string) => string | undefined = (v) => v
 let users: UserRec[] | null = null
+// Keyed by the SHA-256 of the token: the token itself is never written to disk, so a copy of
+// sessions.json cannot be used to sign in. Kept in a file so a restart of the service signs nobody out.
 const sessions = new Map<string, Session>()
+const hashOf = (token: string): string => createHash('sha256').update(token).digest('hex')
+let sessionsLoaded = false
+let saveTimer: NodeJS.Timeout | null = null
+
+function sessionFile(): string {
+  return join(dir, 'sessions.json')
+}
+
+function loadSessions(): void {
+  if (sessionsLoaded || !dir) return
+  sessionsLoaded = true
+  try {
+    if (!existsSync(sessionFile())) return
+    const now = Date.now()
+    for (const r of JSON.parse(readFileSync(sessionFile(), 'utf8')) as (Omit<Session, 'token'> & { h: string })[]) {
+      if (!/^[0-9a-f]{64}$/.test(r.h) || typeof r.userId !== 'string') continue
+      if (now - r.lastSeen > SESSION_IDLE_MS || now - r.createdAt > SESSION_MAX_MS) continue
+      sessions.set(r.h, { token: '', userId: r.userId, ip: String(r.ip ?? ''), createdAt: Number(r.createdAt), lastSeen: Number(r.lastSeen) })
+    }
+  } catch {
+    /* a damaged file only means everyone signs in again */
+  }
+}
+
+function saveSessions(): void {
+  if (!dir) return
+  if (saveTimer) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+  }
+  const rows = [...sessions].map(([h, x]) => ({ h, userId: x.userId, ip: x.ip, createdAt: x.createdAt, lastSeen: x.lastSeen }))
+  const tmp = sessionFile() + '.tmp'
+  try {
+    writeFileSync(tmp, JSON.stringify(rows), { mode: 0o600 })
+    renameSync(tmp, sessionFile())
+  } catch {
+    /* the sessions still work until the next restart */
+  }
+}
+
+/** Idle times change all the time; write them at most once a minute. */
+function saveSoon(): void {
+  if (saveTimer || !dir) return
+  saveTimer = setTimeout(saveSessions, 60000)
+  saveTimer.unref?.()
+}
 
 export function configureAuth(opts: { dir: string; encrypt: (v: string) => string; decrypt: (v: string) => string | undefined }): void {
   dir = opts.dir
@@ -393,27 +446,40 @@ export function startSession(userId: string, ip: string): { token: string; user:
   if (!u || u.disabled) throw new LoginError(BAD)
   u.lastLoginAt = Date.now()
   persist()
+  loadSessions()
   const token = randomBytes(32).toString('hex')
-  sessions.set(token, { token, userId, ip, createdAt: Date.now(), lastSeen: Date.now() })
+  sessions.set(hashOf(token), { token, userId, ip, createdAt: Date.now(), lastSeen: Date.now() })
+  saveSessions()
   return { token, user: toSession(u) }
 }
 
 /** The session for a token, if it is still valid. Touches its idle timer. */
 export function useSession(token: string | undefined): Session | null {
   if (!token) return null
-  const s = sessions.get(token)
+  loadSessions()
+  const h = hashOf(token)
+  const s = sessions.get(h)
   if (!s) return null
   const now = Date.now()
   if (now - s.lastSeen > SESSION_IDLE_MS || now - s.createdAt > SESSION_MAX_MS) {
-    sessions.delete(token)
+    sessions.delete(h)
+    saveSessions()
     return null
   }
+  s.token = token
   s.lastSeen = now
+  saveSoon()
   return s
 }
 
 export function endSession(token: string): void {
-  sessions.delete(token)
+  loadSessions()
+  if (sessions.delete(hashOf(token))) saveSessions()
+}
+
+/** Write pending idle times now (the service is stopping). */
+export function flushSessions(): void {
+  if (saveTimer) saveSessions()
 }
 
 const sessionEndListeners: ((userId: string) => void)[] = []
@@ -424,6 +490,8 @@ export function onSessionsEnded(fn: (userId: string) => void): void {
 }
 
 export function endSessionsOf(userId: string): void {
+  loadSessions()
   for (const [t, s] of sessions) if (s.userId === userId) sessions.delete(t)
+  saveSessions()
   for (const fn of sessionEndListeners) fn(userId)
 }

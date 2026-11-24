@@ -34,6 +34,12 @@ fi
 g config user.name "Apsara Panel backup"
 g config user.email "backup@$(hostname)"
 g config core.bare false
+# GitHub, GitLab and Bitbucket HTTPS addresses become SSH ones: backups sign in with the server's SSH key.
+case "$REPO" in
+  https://github.com/*|https://gitlab.com/*|https://bitbucket.org/*|https://www.github.com/*)
+    H=\${REPO#https://}; H=\${H#www.}; P=\${H#*/}; H=\${H%%/*}; P=\${P%/}; P=\${P%.git}
+    REPO="git@$H:$P.git";;
+esac
 g remote remove origin 2>/dev/null || true
 g remote add origin "$REPO"
 echo "==> Collecting changes in $FOLDER"
@@ -45,7 +51,18 @@ else
   echo "Saved: $(g log -1 --format='%h %s')"
 fi
 echo "==> Pushing to $REPO"
-g push -q origin "HEAD:refs/heads/$BRANCH"
+if ! OUT=$(g push -q origin "HEAD:refs/heads/$BRANCH" 2>&1); then
+  echo "$OUT"
+  case "$OUT" in
+    *"could not read Username"*|*"Authentication failed"*)
+      echo "This address uses HTTPS, which needs a password, and backups sign in with the server's SSH key. Use the SSH address instead (git@host:owner/repo.git).";;
+    *"Connection refused"*|*"Connection timed out"*|*"Could not resolve"*|*"Network is unreachable"*)
+      echo "This server cannot reach the git host over SSH (port 22). Check the server's outgoing firewall or the cloud security group.";;
+    *"Permission denied (publickey)"*|*"Could not read from remote"*|*"denied to deploy key"*|*"ERROR: The key you are authenticating with"*)
+      echo "The git host refused this server's SSH key. Add the key shown under Server key to the repository as a deploy key, with write access allowed.";;
+  esac
+  exit 128
+fi
 echo "==> Backup finished"
 `
 
@@ -106,7 +123,14 @@ true`
   return jobs
 }
 
+/** GitHub, GitLab and Bitbucket HTTPS addresses as SSH ones: backups sign in with the server's SSH key, not a password. */
+export function sshUrl(repo: string): string {
+  const m = /^https:\/\/(?:www\.)?(github\.com|gitlab\.com|bitbucket\.org)\/([^?#]+?)(?:\.git)?\/?$/.exec(repo.trim())
+  return m ? `git@${m[1]}:${m[2]}.git` : repo.trim()
+}
+
 export async function save(client: Client, sudo: Sudo, job: BackupJob): Promise<void> {
+  job = { ...job, repo: sshUrl(String(job.repo ?? '')) }
   const folder = checkJob(job)
   const conf = [`FOLDER=${shq(folder)}`, `REPO=${shq(job.repo.trim())}`, `BRANCH=${shq(job.branch.trim())}`].join('\n') + '\n'
   const log = `/var/log/superdevops-backup-${job.name}.log`
@@ -136,7 +160,8 @@ export async function remove(client: Client, sudo: Sudo, name: string): Promise<
 
 export async function run(client: Client, sudo: Sudo, name: string, log: (s: string) => void): Promise<void> {
   if (!RE_NAME.test(name)) throw new Error('Unknown job.')
-  await runPrivileged(client, `${RUNNER} ${name} 2>&1`, sudo, log)
+  // The runner is written again first, so a server set up with an older one gets its fixes.
+  await runPrivileged(client, `umask 077\necho ${Buffer.from(RUNNER_SCRIPT).toString('base64')} | base64 -d > ${RUNNER}\nchmod 700 ${RUNNER}\n${RUNNER} ${name} 2>&1`, sudo, log)
 }
 
 export async function history(client: Client, sudo: Sudo, name: string): Promise<BackupCommit[]> {

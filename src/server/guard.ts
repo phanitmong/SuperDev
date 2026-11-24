@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync
 import { join } from 'node:path'
 import type { ApprovalRequest, GuardInput, GuardView } from '@shared/team'
 import { APPROVAL_ACTIONS, APPROVAL_MINUTES } from '@shared/team'
+import { setSessionLimits } from './auth'
 
 interface GuardFile {
   allowedIps: string[]
@@ -19,6 +20,10 @@ interface GuardFile {
   approvals: boolean
   /** Terminal recordings older than this many days are removed. 0 keeps them for ever. */
   recordingDays: number
+  /** A session ends after this many hours without use. */
+  sessionIdleHours: number
+  /** Everyone signs in again (with the authenticator code) at least this often. */
+  sessionMaxDays: number
   /** Addresses each person has signed in from before. */
   seen: Record<string, string[]>
   /** Secret the per-server alert keys are made from. */
@@ -63,9 +68,12 @@ function load(): GuardFile {
     alertDanger: raw.alertDanger !== false,
     approvals: raw.approvals === true,
     recordingDays: typeof raw.recordingDays === 'number' && raw.recordingDays >= 0 && raw.recordingDays <= 3650 ? Math.floor(raw.recordingDays) : 90,
+    sessionIdleHours: typeof raw.sessionIdleHours === 'number' && raw.sessionIdleHours >= 1 && raw.sessionIdleHours <= 168 ? Math.floor(raw.sessionIdleHours) : 8,
+    sessionMaxDays: typeof raw.sessionMaxDays === 'number' && raw.sessionMaxDays >= 1 && raw.sessionMaxDays <= 90 ? Math.floor(raw.sessionMaxDays) : 7,
     seen: raw.seen && typeof raw.seen === 'object' ? raw.seen : {},
     relaySecret: typeof raw.relaySecret === 'string' ? raw.relaySecret : undefined
   }
+  setSessionLimits(data.sessionIdleHours, data.sessionMaxDays)
   return data
 }
 
@@ -130,6 +138,8 @@ export function view(callerIp: string): GuardView {
     alertDanger: d.alertDanger,
     approvals: d.approvals,
     recordingDays: d.recordingDays,
+    sessionIdleHours: d.sessionIdleHours,
+    sessionMaxDays: d.sessionMaxDays,
     telegramError: lastTelegramError
   }
 }
@@ -160,6 +170,10 @@ export function save(input: GuardInput, callerIp: string, activeAdmins: number):
 
   const recordingDays = input.recordingDays === undefined ? d.recordingDays : Math.floor(Number(input.recordingDays))
   if (!(recordingDays >= 0 && recordingDays <= 3650)) throw new Error('Keep terminal recordings for 0 (for ever) to 3650 days.')
+  const idleH = input.sessionIdleHours === undefined ? d.sessionIdleHours : Math.floor(Number(input.sessionIdleHours))
+  if (!(idleH >= 1 && idleH <= 168)) throw new Error('Sign out after 1 to 168 hours without use.')
+  const maxD = input.sessionMaxDays === undefined ? d.sessionMaxDays : Math.floor(Number(input.sessionMaxDays))
+  if (!(maxD >= 1 && maxD <= 90)) throw new Error('Ask for the password again every 1 to 90 days.')
 
   const changes: string[] = []
   if (rules.join(',') !== d.allowedIps.join(',')) changes.push(rules.length ? `allowed addresses: ${rules.join(', ')}`.slice(0, 160) : 'allowed addresses: anyone')
@@ -171,6 +185,11 @@ export function save(input: GuardInput, callerIp: string, activeAdmins: number):
 
   if (recordingDays !== d.recordingDays) changes.push(recordingDays ? `terminal recordings kept ${recordingDays} days` : 'terminal recordings kept for ever')
   d.recordingDays = recordingDays
+  if (idleH !== d.sessionIdleHours) changes.push(`sign out after ${idleH} h without use`)
+  if (maxD !== d.sessionMaxDays) changes.push(`sign in again every ${maxD} days`)
+  d.sessionIdleHours = idleH
+  d.sessionMaxDays = maxD
+  setSessionLimits(idleH, maxD)
   d.allowedIps = rules
   d.telegramToken = token
   d.telegramChat = chat || undefined

@@ -2,7 +2,7 @@
 // every operation on their servers (in an engine of its own for each person) and
 // is the only thing that connects to them. This app never receives a server
 // password or key: it shows the window, and carries files to and from the service.
-import { app, BrowserWindow, dialog, ipcMain, shell, systemPreferences } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, shell, systemPreferences } from 'electron'
 import { spawn } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
@@ -10,6 +10,7 @@ import { basename, join } from 'node:path'
 import WebSocket from 'ws'
 import type { LoginStep, SessionState, SessionUser } from '@shared/team'
 import appIcon from '../../resources/icon.png?asset'
+import { checkNow, install as installUpdate, startUpdater, updateState } from './updater'
 
 let win: BrowserWindow | null = null
 let closeConfirmed = false
@@ -24,6 +25,8 @@ function send(channel: string, payload: unknown): void {
 interface ClientConfig {
   serverUrl: string
   lastUsername: string
+  /** The session token, encrypted by the system's keychain (safeStorage), so a restart of the app does not ask to sign in again. */
+  session?: string
 }
 
 function configFile(): string {
@@ -33,7 +36,7 @@ function configFile(): string {
 function loadConfig(): ClientConfig {
   try {
     const c = JSON.parse(readFileSync(configFile(), 'utf8')) as Partial<ClientConfig>
-    return { serverUrl: c.serverUrl ?? '', lastUsername: c.lastUsername ?? '' }
+    return { serverUrl: c.serverUrl ?? '', lastUsername: c.lastUsername ?? '', session: typeof c.session === 'string' ? c.session : undefined }
   } catch {
     return { serverUrl: '', lastUsername: '' }
   }
@@ -65,8 +68,8 @@ class RemoteError extends Error {
 // ---------------------------------------------------------------- lock (Touch ID on a Mac)
 let locked = false
 let lockTimer: ReturnType<typeof setTimeout> | undefined
-/** A locked app signs out by itself after this long, like an idle session on the service. */
-const LOCK_LIMIT_MINUTES = 45
+/** A locked app used to sign out by itself after 45 minutes. The service's own idle limit (Team → Protection) now decides; 0 = off. */
+const LOCK_LIMIT_MINUTES = 0
 /** What the window may still ask for while locked. Everything else is refused here, not just hidden. */
 const WHILE_LOCKED = new Set(['session:state', 'app:unlock', 'auth:logout', 'monitor:sample', 'app:closeNow', 'app:closeCancelled'])
 
@@ -82,7 +85,7 @@ function setLocked(value: boolean): void {
   locked = value
   if (lockTimer) clearTimeout(lockTimer)
   lockTimer = undefined
-  if (value) {
+  if (value && LOCK_LIMIT_MINUTES > 0) {
     lockTimer = setTimeout(() => {
       remote('auth:logout', []).catch(() => undefined).finally(() => {
         dropConnection()
@@ -93,7 +96,7 @@ function setLocked(value: boolean): void {
 }
 
 function state(): SessionState {
-  return { serverUrl: config.serverUrl, lastUsername: config.lastUsername, connected: !!ws && ws.readyState === WebSocket.OPEN, user, locked: locked && !!user, biometric: canFingerprint() }
+  return { serverUrl: config.serverUrl, lastUsername: config.lastUsername, connected: !!ws && ws.readyState === WebSocket.OPEN, reconnecting: !!reconnectTimer || reconnectRunning, user, locked: locked && !!user, biometric: canFingerprint() }
 }
 
 function changed(): void {
@@ -115,8 +118,129 @@ function normalizeUrl(input: string): string {
   return url.origin
 }
 
+/** Keep the session on this computer, encrypted by the system, or forget it. */
+function rememberSession(t: string | null): void {
+  let next: string | undefined
+  try {
+    if (t && safeStorage.isEncryptionAvailable()) next = safeStorage.encryptString(t).toString('base64')
+  } catch {
+    next = undefined
+  }
+  if (next === config.session) return
+  config = { ...config, session: next }
+  saveConfig(config)
+}
+
+function savedSession(): string | null {
+  try {
+    if (!config.session || !safeStorage.isEncryptionAvailable()) return null
+    const t = safeStorage.decryptString(Buffer.from(config.session, 'base64'))
+    return /^[0-9a-f]{64}$/.test(t) ? t : null
+  } catch {
+    return null
+  }
+}
+
+async function tryResumeAtStart(saved: string): Promise<void> {
+  if (user || token !== saved) return
+  try {
+    await openSocket()
+    user = await rawRemote<SessionUser>('auth:resume', [saved])
+    if (canFingerprint()) setLocked(true)
+    remote('client:hello', [config.serverUrl]).catch(() => undefined)
+    changed()
+  } catch (err) {
+    if (err instanceof RemoteError && err.code === 'unauthorized') {
+      token = null
+      rememberSession(null)
+      changed()
+    } else setTimeout(() => void tryResumeAtStart(saved), 10000)
+  }
+}
+
+// ---------------------------------------------------------------- reconnect
+// A dropped connection (sleep, Wi-Fi change, a proxy closing the socket, a restart of the service) is not a sign-out:
+// the app keeps the session, connects again and asks the service to resume it.
+let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+let reconnectRunning = false
+let reconnectTries = 0
+const reconnectWaiters: (() => void)[] = []
+
+function stopReconnect(): void {
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = undefined
+  reconnectTries = 0
+  for (const w of reconnectWaiters.splice(0)) w()
+}
+
+function scheduleReconnect(): void {
+  if (reconnectTimer || reconnectRunning || !token) return
+  const delays = [500, 1500, 3000, 5000, 10000, 15000, 30000]
+  const wait = delays[Math.min(reconnectTries, delays.length - 1)]
+  reconnectTries++
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = undefined
+    void tryResume()
+  }, wait)
+  changed()
+}
+
+async function tryResume(): Promise<void> {
+  if (!token || reconnectRunning) return
+  reconnectRunning = true
+  const t = token
+  try {
+    await openSocket()
+    const me = await remote<SessionUser>('auth:resume', [t])
+    user = me
+    remote('client:hello', [config.serverUrl]).catch(() => undefined)
+    reconnectRunning = false
+    stopReconnect()
+    changed()
+    setTimeout(() => void checkNow(), 3000)
+  } catch (err) {
+    reconnectRunning = false
+    if (err instanceof RemoteError && err.code === 'unauthorized') {
+      // The service no longer knows the session: sign in again.
+      stopReconnect()
+      dropConnection()
+      changed()
+      return
+    }
+    try {
+      ws?.removeAllListeners()
+      ws?.close()
+    } catch {
+      /* already closed */
+    }
+    ws = null
+    scheduleReconnect()
+  }
+}
+
+/** While reconnecting, a call waits for the connection (up to 30 s) instead of failing at once. */
+function waitForConnection(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const done = (): void => {
+      clearTimeout(t)
+      resolve()
+    }
+    const t = setTimeout(() => {
+      const i = reconnectWaiters.indexOf(done)
+      if (i >= 0) reconnectWaiters.splice(i, 1)
+      resolve()
+    }, ms)
+    reconnectWaiters.push(done)
+  })
+}
+
 function dropConnection(): void {
   setLocked(false)
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = undefined
+  reconnectTries = 0
+  for (const w of reconnectWaiters.splice(0)) w()
+  rememberSession(null)
   const old = ws
   ws = null
   token = null
@@ -135,6 +259,13 @@ function openConnection(): Promise<void> {
   if (ws && ws.readyState === WebSocket.OPEN) return Promise.resolve()
   if (!config.serverUrl) return Promise.reject(new Error('Enter the address of your Apsara Panel service.'))
   dropConnection()
+  return openSocket()
+}
+
+/** Open the WebSocket without touching the session (used to sign in and to reconnect). */
+function openSocket(): Promise<void> {
+  if (ws && ws.readyState === WebSocket.OPEN) return Promise.resolve()
+  if (!config.serverUrl) return Promise.reject(new Error('Enter the address of your Apsara Panel service.'))
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(config.serverUrl.replace(/^http/, 'ws') + '/ws', { handshakeTimeout: 12000 })
     let opened = false
@@ -159,7 +290,13 @@ function openConnection(): Promise<void> {
       else w.reject(new RemoteError(msg.error || 'Something went wrong.', msg.code))
     })
     socket.on('close', () => {
-      if (ws === socket) {
+      if (ws !== socket) return
+      ws = null
+      for (const w of waiting.values()) w.reject(new RemoteError('The connection to the service was lost. Connecting again…', 'reconnecting'))
+      waiting.clear()
+      socket.removeAllListeners()
+      if (token && user) scheduleReconnect()
+      else {
         dropConnection()
         changed()
       }
@@ -177,7 +314,14 @@ function openConnection(): Promise<void> {
   })
 }
 
-function remote<T = unknown>(method: string, args: unknown[]): Promise<T> {
+async function remote<T = unknown>(method: string, args: unknown[]): Promise<T> {
+  if ((!ws || ws.readyState !== WebSocket.OPEN) && token && (reconnectTimer || reconnectRunning) && method !== 'auth:resume') {
+    await waitForConnection(30000)
+  }
+  return rawRemote<T>(method, args)
+}
+
+function rawRemote<T = unknown>(method: string, args: unknown[]): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     if (!ws || ws.readyState !== WebSocket.OPEN) return reject(new RemoteError('Not connected to the service.', 'unauthorized'))
     const id = ++nextId
@@ -290,6 +434,8 @@ async function finishLogin(step: LoginStep): Promise<LoginStep> {
   if (step.next === 'done') {
     token = step.token
     user = step.user
+    rememberSession(step.token)
+    setTimeout(() => void checkNow(), 3000)
     // Managed servers send their alerts to the address this app reached the service at.
     remote('client:hello', [config.serverUrl]).catch(() => undefined)
     changed()
@@ -319,6 +465,9 @@ function backupDir(target: string, connName: string): string {
 
 const local: Record<string, Local> = {
   'session:state': () => state(),
+  'update:state': () => updateState(),
+  'update:check': () => checkNow(),
+  'update:install': () => installUpdate(),
   'session:connect': async (url: string) => {
     const next = normalizeUrl(url)
     if (next !== config.serverUrl) {
@@ -651,7 +800,54 @@ app.whenReady().then(() => {
     }
   }
   config = loadConfig()
+  // Tests on Linux without a keychain only (never in an installed app).
+  if (!app.isPackaged && process.env.APSARA_TEST_PLAIN_STORAGE === '1') {
+    try {
+      ;(safeStorage as unknown as { setUsePlainTextEncryption?: (v: boolean) => void }).setUsePlainTextEncryption?.(true)
+    } catch {
+      /* not offered by this Electron */
+    }
+  }
   registerIpc()
+  startUpdater({
+    url: () => config.serverUrl,
+    token: () => token,
+    notify: (s) => send('update:state', s),
+    quit: () => {
+      closeConfirmed = true
+      quitting = true
+      app.quit()
+    }
+  })
+  // Signed in before on this computer: pick the session up again instead of asking for the password and code.
+  const saved = savedSession()
+  if (saved && config.serverUrl) {
+    token = saved
+    reconnectRunning = true
+    openSocket()
+      .then(() => rawRemote<SessionUser>('auth:resume', [saved]))
+      .then((me) => {
+        user = me
+        // With Touch ID the app opens locked, so someone else at this computer cannot just open it.
+        if (canFingerprint()) setLocked(true)
+        remote('client:hello', [config.serverUrl]).catch(() => undefined)
+        setTimeout(() => void checkNow(), 5000)
+      })
+      .catch((err) => {
+        if (err instanceof RemoteError && err.code === 'unauthorized') {
+          token = null
+          rememberSession(null)
+        } else if (token) {
+          // Offline at start: keep trying in the background; the sign-in page shows until it works.
+          setTimeout(() => void tryResumeAtStart(saved), 5000)
+        }
+      })
+      .finally(() => {
+        reconnectRunning = false
+        for (const w of reconnectWaiters.splice(0)) w()
+        changed()
+      })
+  }
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
