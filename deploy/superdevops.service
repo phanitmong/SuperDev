@@ -1,0 +1,27 @@
+# /etc/systemd/system/superdevops.service
+[Unit]
+Description=SuperDevops service
+After=network.target
+
+[Service]
+User=superdevops
+Group=superdevops
+WorkingDirectory=/opt/superdevops
+Environment=SUPERDEVOPS_DATA=/var/lib/superdevops-service
+Environment=HOST=127.0.0.1
+Environment=PORT=8787
+# nginx (below) is the only thing that talks to this port, so its X-Forwarded-For can be trusted.
+Environment=TRUST_PROXY=1
+# The address your managed servers send their alerts to, when it differs from the one people sign in to.
+#Environment=SUPERDEVOPS_PUBLIC_URL=https://devops.example.com
+ExecStart=/usr/bin/node /opt/superdevops/server.js
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/superdevops-service
+
+[Install]
+WantedBy=multi-user.target

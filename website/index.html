@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apsara Panel: run your Linux servers from one desktop app</title>
+<meta name="description" content="Apsara Panel is a desktop app for teams that look after Linux servers: deploy sites, install PHP, Node.js, Python, Java, Docker and databases, manage files, watch load, set firewalls, and back up to Google Drive, all over SSH from your own computer.">
+<link rel="icon" href="assets/favicon.png">
+<link rel="preload" href="assets/manrope.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face { font-family: "Manrope"; src: url("assets/manrope.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+
+:root {
+  --night: #0a0d26;
+  --deep: #11163a;
+  --panel: #161c46;
+  --line: #2a3166;
+  --ink: #eef0ff;
+  --muted: #a6aed6;
+  --blue: #4a74ff;
+  --violet: #7d5fff;
+  --ok: #2fd08a;
+  --warn: #ffb648;
+  --signal: linear-gradient(100deg, var(--blue), var(--violet));
+  --wrap: 1180px;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--ink);
+  font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 17px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+html { overflow-x: hidden; }
+@supports (overflow: clip) { html, body { overflow-x: clip; } }
+img { max-width: 100%; height: auto; display: block; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid #9db4ff; outline-offset: 3px; border-radius: 6px; }
+.wrap { width: min(100% - 48px, var(--wrap)); margin-inline: auto; }
+.mono { font-family: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace; font-size: 0.86em; }
+
+/* ---- top bar ---- */
+.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 750; font-size: 19px; text-decoration: none; letter-spacing: -0.01em; }
+.brand img { width: 36px; height: 36px; border-radius: 9px; }
+.top nav { display: flex; gap: 28px; align-items: center; font-size: 15px; }
+.top nav a { text-decoration: none; color: var(--muted); }
+.top nav a:hover { color: var(--ink); }
+.top nav .pill { color: var(--ink); border: 1px solid var(--line); padding: 8px 16px; border-radius: 999px; }
+.top nav .pill:hover { border-color: #5a66b8; }
+
+/* ---- hero ---- */
+.hero { position: relative; padding: 56px 0 0; }
+.hero::before {
+  content: ""; position: absolute; inset: -120px 0 auto; height: 760px; z-index: -1;
+  background:
+    radial-gradient(620px 420px at 82% 30%, rgba(125, 95, 255, 0.34), transparent 70%),
+    radial-gradient(520px 380px at 8% 0%, rgba(74, 116, 255, 0.22), transparent 70%);
+}
+.hero-grid { display: grid; grid-template-columns: minmax(0, 0.92fr) minmax(0, 1.08fr); gap: 56px; align-items: start; }
+h1 { font-size: clamp(2.4rem, 4.6vw, 3.8rem); line-height: 1.06; letter-spacing: -0.035em; font-weight: 780; margin: 18px 0 22px; max-width: 15ch; }
+.lead { font-size: 1.16rem; color: var(--muted); max-width: 46ch; margin: 0 0 30px; }
+
+.get { background: rgba(22, 28, 70, 0.72); border: 1px solid var(--line); border-radius: 20px; padding: 22px; max-width: 470px; backdrop-filter: blur(6px); }
+.get-for { font-size: 14px; color: var(--muted); margin: 0 0 12px; }
+.buttons { display: grid; gap: 10px; }
+.btn {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 15px 20px; border-radius: 13px; border: 1px solid var(--line);
+  text-decoration: none; font-weight: 680; font-size: 16px; color: var(--ink); background: transparent;
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.btn small { font-weight: 500; font-size: 13px; color: var(--muted); }
+.btn.main { background: var(--signal); border-color: transparent; box-shadow: 0 14px 34px rgba(88, 96, 255, 0.36); }
+.btn.main small { color: rgba(255, 255, 255, 0.82); }
+.btn.other { padding: 11px 18px; font-size: 14.5px; font-weight: 620; }
+.btn:hover { transform: translateY(-1px); border-color: #5a66b8; }
+.btn.main:hover { box-shadow: 0 18px 40px rgba(88, 96, 255, 0.5); }
+.btn[aria-disabled="true"] { opacity: 0.55; pointer-events: none; box-shadow: none; }
+.get-note { font-size: 13.5px; color: var(--muted); margin: 14px 0 0; }
+.get-note a { color: #c3ccff; }
+
+.hero-shot { position: relative; margin-right: calc((100vw - min(100vw - 48px, var(--wrap))) / -2 - 40px); }
+.hero-shot img { width: 860px; max-width: none; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 40px 100px rgba(4, 6, 30, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.03); }
+.now {
+  position: absolute; left: -26px; bottom: 54px; display: flex; gap: 12px; align-items: center;
+  background: #fff; color: #171c33; border-radius: 14px; padding: 12px 18px 12px 14px; font-size: 14px; line-height: 1.35;
+  box-shadow: 0 18px 44px rgba(6, 8, 40, 0.5); border: 1px solid #4a74ff;
+}
+.now b { display: block; font-size: 15px; }
+.now i { width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 5px rgba(47, 208, 138, 0.2); flex: none; }
+
+/* ---- sections ---- */
+section { padding: 104px 0 0; }
+h2 { font-size: clamp(1.8rem, 3.2vw, 2.6rem); line-height: 1.12; letter-spacing: -0.028em; font-weight: 760; margin: 0 0 16px; max-width: 20ch; }
+.sub { color: var(--muted); max-width: 60ch; margin: 0; }
+
+.does { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; margin-top: 44px; }
+.does div { background: var(--deep); padding: 28px 26px 30px; }
+.does h3 { margin: 0 0 8px; font-size: 1.08rem; font-weight: 720; letter-spacing: -0.01em; }
+.does p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+.show { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 56px; align-items: center; }
+.show.flip { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); }
+.show.flip .words { order: 2; }
+.show img { border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(4, 6, 30, 0.6); }
+.words ul { list-style: none; padding: 0; margin: 22px 0 0; display: grid; gap: 12px; }
+.words li { padding-left: 26px; position: relative; color: var(--muted); font-size: 16px; }
+.words li::before { content: ""; position: absolute; left: 0; top: 0.62em; width: 12px; height: 2px; background: var(--signal); border-radius: 2px; }
+.words li b { color: var(--ink); font-weight: 650; }
+
+/* ---- how it connects ---- */
+.route { margin-top: 44px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 0; align-items: stretch; }
+.node { background: var(--deep); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+.node h3 { margin: 0 0 6px; font-size: 1.05rem; font-weight: 720; }
+.node p { margin: 0; color: var(--muted); font-size: 15px; }
+.wire { display: grid; place-items: center; padding: 0 18px; min-width: 190px; text-align: center; font-size: 13.5px; color: var(--muted); position: relative; }
+.wire::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--signal); }
+.wire span { position: relative; background: var(--night); padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink); font-weight: 620; }
+.side { margin-top: 18px; display: grid; grid-template-columns: 1fr auto 1fr; }
+.side .node { grid-column: 1; border-style: dashed; }
+.side .wire::before { background: none; border-top: 2px dashed var(--line); height: 0; }
+.side p.after { grid-column: 3; align-self: center; margin: 0; color: var(--muted); font-size: 15px; max-width: 40ch; }
+
+/* ---- install ---- */
+.steps { counter-reset: s; list-style: none; padding: 0; margin: 44px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; }
+.steps li { counter-increment: s; background: var(--deep); border: 1px solid var(--line); border-radius: 18px; padding: 26px; }
+.steps li::before { content: counter(s); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--signal); font-weight: 760; margin-bottom: 16px; }
+.steps h3 { margin: 0 0 8px; font-size: 1.05rem; font-weight: 720; }
+.steps p { margin: 0; color: var(--muted); font-size: 15.5px; }
+
+.all { margin-top: 40px; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+.all table { width: 100%; border-collapse: collapse; font-size: 15.5px; }
+.all th, .all td { text-align: left; padding: 16px 22px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.all tr:last-child td { border-bottom: 0; }
+.all th { color: var(--muted); font-weight: 600; font-size: 13.5px; background: var(--deep); }
+.all td small { color: var(--muted); display: block; font-size: 13.5px; }
+.all a.dl { display: inline-block; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--line); text-decoration: none; font-weight: 650; font-size: 14.5px; white-space: nowrap; }
+.all a.dl:hover { border-color: #5a66b8; }
+.all a.dl[aria-disabled="true"] { opacity: 0.5; pointer-events: none; }
+
+.first { margin-top: 26px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.first div { border-left: 3px solid var(--warn); background: rgba(255, 182, 72, 0.07); padding: 18px 22px; border-radius: 0 14px 14px 0; font-size: 15px; color: var(--muted); }
+.first b { color: var(--ink); display: block; margin-bottom: 4px; }
+
+footer { margin-top: 110px; border-top: 1px solid var(--line); padding: 30px 0 46px; color: var(--muted); font-size: 14.5px; }
+footer .wrap { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--ink); }
+
+@media (max-width: 980px) {
+  .hero-grid, .show, .show.flip { grid-template-columns: 1fr; gap: 36px; }
+  .show.flip .words { order: 0; }
+  .hero-shot { margin-right: 0; }
+  .hero-shot img { width: 100%; max-width: 100%; }
+  .now { left: 12px; bottom: 16px; }
+  .does, .steps, .first { grid-template-columns: 1fr; }
+  .route, .side { grid-template-columns: 1fr; }
+  .wire { min-width: 0; padding: 22px 0; }
+  .wire::before { left: 50%; right: auto; top: 0; bottom: 0; width: 2px; height: auto; }
+  .side .wire::before { border-top: 0; border-left: 2px dashed var(--line); width: 0; }
+  .side .node, .side p.after { grid-column: 1; }
+  .side p.after { margin-top: 16px; }
+  section { padding-top: 76px; }
+  .top nav a:not(.pill) { display: none; }
+  .all th:nth-child(2), .all td:nth-child(2) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .btn { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="wrap top">
+  <a class="brand" href="#top" id="top"><img src="assets/icon.png" alt="" width="36" height="36">Apsara Panel</a>
+  <nav aria-label="Sections">
+    <a href="#does">What it does</a>
+    <a href="#team">For teams</a>
+    <a href="#connects">How it connects</a>
+    <a href="#install">Install</a>
+    <a class="pill" href="#download">Download</a>
+  </nav>
+</header>
+
+<main>
+  <div class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <h1>Run your Linux servers from one desktop app</h1>
+        <p class="lead">Deploy sites, install what they run on, manage databases and containers, watch the load, set the firewall and back everything up. Apsara Panel does it over SSH from a team service you run yourself, so nothing has to be installed on the server first.</p>
+
+        <div class="get" id="download">
+          <p class="get-for" id="get-for">Version <span data-version>1.0.0</span></p>
+          <div class="buttons" id="buttons"></div>
+          <p class="get-note" id="get-note">What each system needs is listed under <a href="#install">Install</a>.</p>
+        </div>
+      </div>
+
+      <div class="hero-shot">
+        <img src="assets/shot-overview.png" width="1280" height="860" alt="The Overview page of Apsara Panel: load, CPU, memory and disk of a server called Production web, with live charts below.">
+        <div class="now" aria-hidden="true"><i></i><span><b>Now working on Production web</b>deployer@203.0.113.20</span></div>
+      </div>
+    </div>
+  </div>
+
+  <section id="does">
+    <div class="wrap">
+      <h2>One window for the work a server needs</h2>
+      <p class="sub">Each server you add gets the same set of pages. A notice names the server every time you switch, so a command never lands on the wrong one.</p>
+      <div class="does">
+        <div><h3>Sites and deploys</h3><p>Deploy PHP, Node.js, Python, Java or static sites from an upload or from Git, with rollback when a new version does not answer. Several domains per site, HTTPS, URL rewriting, and stop, start or maintenance mode for one site at a time.</p></div>
+        <div><h3>Reverse proxy and Nginx</h3><p>Send a path such as <span class="mono">/api</span> to an app or another server, set upload size, compression, caching, redirects and headers in a form, and add your own directives. Nginx checks every change before it is used.</p></div>
+        <div><h3>App Store</h3><p>Nginx, PHP, Node.js, Python, Java, Docker, Composer, PM2, Supervisor, MySQL, MariaDB, PostgreSQL, MongoDB and Redis. Install in the version you choose, restart, and uninstall without losing data.</p></div>
+        <div><h3>Databases</h3><p>Create MySQL, MariaDB, PostgreSQL and MongoDB databases, each with a user of its own, and decide who may connect. Passwords are shown again only with your authenticator code. A full client for remote databases is built in.</p></div>
+        <div><h3>Docker</h3><p>Run a container from an image with ports, folders and variables, read its output, stop and restart it, and bring Compose projects up. Ports stay closed to the internet unless you open them.</p></div>
+        <div><h3>Files and terminal</h3><p>Browse, edit, upload and download files with a code editor, a trash, and copy to another server. Open as many terminals as you need, in tabs.</p></div>
+        <div><h3>Security</h3><p>A scored check of the usual weak spots with one-click fixes, the system firewall, an nginx firewall, Fail2ban, and a list of attacking addresses you can block.</p></div>
+        <div><h3>Backups</h3><p>Daily database backups and folder archives, sent by the server itself to Google Drive, to S3 storage such as Amazon S3, Cloudflare R2 or Backblaze B2, or to another server. Bring any copy back when you need it.</p></div>
+        <div><h3>Monitoring and alerts</h3><p>CPU, memory, disk and network live and over seven days. Telegram messages for a full disk, an attack, a site that stopped answering, or a backup that did not run, with one bot for every server.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap show flip">
+      <img src="assets/shot-appstore.png" width="1280" height="860" loading="lazy" alt="The App Store page: cards for Nginx, PHP, Node.js, Python, Java, Docker, Composer and PM2, each showing the installed version with buttons to restart and manage.">
+      <div class="words">
+        <h2>Install what a server needs, in the version you need</h2>
+        <p class="sub">The App Store asks the server what exists for its system and offers exactly that: the system's own package, or a release from the project that makes it.</p>
+        <ul>
+          <li><b>Choose the version.</b> PostgreSQL 14 to 18, MariaDB, MySQL 8, MongoDB, Redis, PHP, Node.js and Java.</li>
+          <li><b>Restart from the card.</b> One service at a time, with the configuration checked first.</li>
+          <li><b>Uninstall keeps your data.</b> The program goes; databases, settings and backups stay for the next install.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap show">
+      <div class="words">
+        <h2>See what is wrong before someone else finds it</h2>
+        <p class="sub">The security check reads the server the way an attacker would and tells you what to fix first.</p>
+        <ul>
+          <li><b>A score with reasons.</b> Every finding says what it is and why it matters.</li>
+          <li><b>Fix now, where one click is safe.</b> The rest opens the page that manages it.</li>
+          <li><b>Never locks you out.</b> The address you connect from cannot be blocked by mistake.</li>
+        </ul>
+      </div>
+      <img src="assets/shot-security.png" width="1280" height="860" loading="lazy" alt="The Security check page: a score with a verdict, six protections with switches, and four counters for risks, failed sign-ins, blocked addresses and waiting updates.">
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap show flip">
+      <img src="assets/shot-databases.png" width="1280" height="860" loading="lazy" alt="The Databases page: a list of databases with size, user, who can connect, and buttons to back up or delete.">
+      <div class="words">
+        <h2>Backups that keep running when the app is closed</h2>
+        <p class="sub">The server makes its own backups on a schedule you choose and sends them away from itself.</p>
+        <ul>
+          <li><b>To Google Drive or S3 storage</b>, every hour, every few hours or once a day.</li>
+          <li><b>To another of your servers</b>, with its own limited account.</li>
+          <li><b>Restore asks for your code.</b> Bringing data back needs a fresh code from your authenticator.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="team">
+    <div class="wrap">
+      <h2>Made for a team, not for one shared password</h2>
+      <p class="sub">Everyone signs in as themselves, sees only the servers shared with them, and leaves a record of what they did.</p>
+      <div class="does">
+        <div><h3>Sign-in you control</h3><p>A password and an authenticator code for every person, four roles, and a list of addresses that may sign in at all. Anywhere else is refused before the password is looked at.</p></div>
+        <div><h3>A second person for heavy actions</h3><p>Deleting or restoring a database, restarting a server, removing a site or uninstalling an app can wait until another admin approves it in their own app.</p></div>
+        <div><h3>A record that holds</h3><p>Every action goes to an audit log that shows when a line was changed or removed. New sign-ins and dangerous actions arrive in your Telegram chat as they happen.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="connects">
+    <div class="wrap">
+      <h2>Server passwords stay on one machine you control.</h2>
+      <p class="sub">Your team service is the only thing that signs in to your servers. People's computers never receive a server password or key, and there is no agent to install on a server.</p>
+      <div class="route">
+        <div class="node"><h3>Your team service</h3><p>A small program you run yourself. It keeps the server sign-ins encrypted, runs each person's work in a process of its own, and handles sign-in with an authenticator code, roles, approvals, alerts and a tamper-evident audit log.</p></div>
+        <div class="wire"><span>SSH</span></div>
+        <div class="node"><h3>Your Linux servers</h3><p>They only need to accept SSH from the service, so you can close it to everyone else. Ubuntu and Debian are fully supported; other common distributions work for most pages.</p></div>
+      </div>
+      <div class="side">
+        <div class="node"><h3>Apsara Panel on each computer</h3><p>macOS, Windows or Linux. It shows the work and carries the files you upload or download. Removing someone's account cuts their access at once.</p></div>
+        <div class="wire"><span>sign-in and every action</span></div>
+        <p class="after">Working alone, you can run the service on your own computer.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="sub">Three steps from download to the first server.</p>
+      <ol class="steps">
+        <li><h3>Download and open</h3><p>Pick the file for your system below. On macOS drag Apsara Panel into Applications; on Windows run the installer.</p></li>
+        <li><h3>Start the team service</h3><p>Run the service on a small server your other servers accept SSH from, or on your own computer, create the first admin, and sign in from the app.</p></li>
+        <li><h3>Add a server</h3><p>Enter its address and an SSH user with a password or a key. The Overview page opens as soon as it connects.</p></li>
+      </ol>
+
+      <div class="all">
+        <table>
+          <thead><tr><th scope="col">System</th><th scope="col">Needs</th><th scope="col"><span data-version>1.0.0</span></th></tr></thead>
+          <tbody>
+            <tr><td>macOS, Apple Silicon<small>M1 and later</small></td><td>macOS 13 or later</td><td><a class="dl" data-file="macArm" href="#">Download .dmg</a></td></tr>
+            <tr><td>macOS, Intel</td><td>macOS 13 or later</td><td><a class="dl" data-file="macIntel" href="#">Download .dmg</a></td></tr>
+            <tr><td>Windows<small>64-bit</small></td><td>Windows 10 or later</td><td><a class="dl" data-file="windows" href="#">Download .exe</a></td></tr>
+            <tr><td>Linux<small>64-bit, AppImage</small></td><td>A desktop from the last few years</td><td><a class="dl" data-file="linux" href="#">Download .AppImage</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="first">
+        <div><b>First open on macOS</b>If macOS says it cannot verify the developer, open System Settings, go to Privacy &amp; Security, and press Open Anyway next to the message about Apsara Panel. On older versions of macOS, right-click the app and choose Open. You only do this once.</div>
+        <div><b>First run on Windows</b>If Windows shows "Windows protected your PC", choose More info, then Run anyway.</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Apsara Panel <span data-version>1.0.0</span></span>
+    <span><a href="privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="terms.html">Terms</a></span>
+  </div>
+</footer>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  var c = window.SUPERDEVOPS || { version: '', releases: '', files: {} };
+  var base = (c.releases || '').replace(/\/+$/, '');
+  var soon = c.soon || [];
+  var isSoon = function (key) { return soon.indexOf(key) !== -1; };
+  var url = function (key) { return base && c.files[key] && !isSoon(key) ? base + '/' + c.files[key] : ''; };
+
+  document.querySelectorAll('[data-version]').forEach(function (el) { el.textContent = c.version || ''; });
+
+  document.querySelectorAll('a.dl').forEach(function (a) {
+    var u = url(a.getAttribute('data-file'));
+    if (u) a.href = u; else { a.setAttribute('aria-disabled', 'true'); a.removeAttribute('href'); a.textContent = isSoon(a.getAttribute('data-file')) ? 'Coming soon' : 'Not published yet'; }
+  });
+
+  // The main buttons are the ones for the visitor's own system.
+  var ua = navigator.userAgent || '';
+  var plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+  var os = /Mac/i.test(plat) || /Macintosh/.test(ua) ? 'mac' : /Win/i.test(plat) || /Windows/.test(ua) ? 'win' : /Linux|X11/i.test(plat + ua) && !/Android/.test(ua) ? 'linux' : 'other';
+  var sets = {
+    mac: [['macArm', 'Download for Mac', 'Apple Silicon'], ['macIntel', 'Download for Mac', 'Intel']],
+    win: [['windows', 'Download for Windows', '64-bit installer']],
+    linux: [['linux', 'Download for Linux', 'AppImage, 64-bit']],
+    other: []
+  };
+  // Then the other systems, so every download is one click away.
+  var order = ['mac', 'win', 'linux'];
+  var list = sets[os].concat(order.filter(function (o) { return o !== os; }).reduce(function (all, o) { return all.concat(sets[o]); }, []));
+  var names = { mac: 'macOS', win: 'Windows', linux: 'Linux', other: 'a desktop computer' };
+  var box = document.getElementById('buttons');
+  var mine = sets[os].length;
+  list.forEach(function (s, i) {
+    var a = document.createElement('a');
+    a.className = 'btn' + (i === 0 && mine ? ' main' : '') + (i >= mine && mine ? ' other' : '');
+    var u = url(s[0]);
+    if (u) a.href = u; else a.setAttribute('aria-disabled', 'true');
+    var label = document.createElement('span'); label.textContent = s[1];
+    var hint = document.createElement('small'); hint.textContent = isSoon(s[0]) ? s[2] + ', coming soon' : s[2];
+    a.appendChild(label); a.appendChild(hint); box.appendChild(a);
+  });
+  document.getElementById('get-for').textContent = 'Version ' + (c.version || '') + ' for ' + names[os];
+  if (mine && isSoon(sets[os][0][0])) document.getElementById('get-note').textContent = 'The ' + names[os] + ' version is being built. The download opens here when it is ready.';
+  else if (!base) document.getElementById('get-note').textContent = 'The first release is not published yet. The downloads open here when it is.';
+  else if (os === 'other') document.getElementById('get-note').textContent = 'Apsara Panel runs on desktop computers. Open this page on one to download it.';
+})();
+</script>
+</body>
+</html>

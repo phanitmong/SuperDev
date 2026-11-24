@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of use · Apsara Panel</title>
+<link rel="icon" href="assets/favicon.png">
+<link rel="stylesheet" href="assets/legal.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html"><img src="assets/icon.png" alt="" width="36" height="36">Apsara Panel</a>
+  <nav aria-label="Pages">
+    <a href="index.html#download">Download</a>
+    <a href="privacy.html">Privacy</a>
+    <a href="terms.html" aria-current="page">Terms</a>
+  </nav>
+</header>
+<main class="wrap">
+<h1>Terms of use</h1>
+<p class="when">Last updated 21 November 2026</p>
+<div class="short"><p><b>The short version.</b> Apsara Panel is a tool that carries out what you tell it to on your own servers. You are responsible for those servers and for having backups. The software comes without a guarantee.</p></div>
+
+<h2>The agreement</h2>
+<p>These terms are between you and <span data-publisher>Apsara Panel</span> ("we"), the publisher of the Apsara Panel desktop app and team service ("the software"). By installing or using the software you accept them. If you use it for an organisation, you accept them for that organisation.</p>
+
+<h2>What you may do</h2>
+<ul>
+  <li>Install and use the software to manage servers that you own or are allowed to administer.</li>
+  <li>Use it within your team by running your own team service.</li>
+</ul>
+
+<h2>What you may not do</h2>
+<ul>
+  <li>Use the software on servers, databases or accounts you have no permission to access.</li>
+  <li>Use it to break the law, to attack or disrupt systems, or to get around someone else's security.</li>
+  <li>Remove the notices that say who made the software, or pass it off as your own.</li>
+</ul>
+
+<h2>Your servers, your responsibility</h2>
+<p>The software runs commands on your servers with the access you give it, often as the administrator. Some actions cannot be undone: deleting a database, restoring over existing data, emptying a table, deleting files, changing firewall rules, restarting or shutting down a server. The app asks before these, and for restores it asks for your authenticator code, but the decision is yours.</p>
+<ul>
+  <li>Keep backups that do not depend on the server they protect, and check from time to time that they can be restored.</li>
+  <li>Keep your team service, its data folder and its key file safe. Whoever has them has your servers' sign-ins.</li>
+  <li>Choose who gets which role in your team. The audit log records what each person did.</li>
+</ul>
+
+<h2>Other services</h2>
+<p>Features that use GitHub, Google Drive, Telegram or a certificate authority depend on those services and on your agreement with them. We do not control them and are not responsible for their availability or their handling of your data.</p>
+
+<h2>Installers without a publisher signature</h2>
+<p>Until the installers carry a publisher's signature, macOS and Windows show a warning the first time you open them. Download the software only from the address on this website.</p>
+
+<h2>No guarantee</h2>
+<p>The software is provided as it is. As far as the law allows, we give no guarantee that it is free of faults, that it suits a particular purpose, or that it will run without interruption, and we are not liable for loss of data, loss of income, downtime or other damage that comes from using it or from being unable to use it. Nothing in these terms limits liability that the law does not allow to be limited.</p>
+
+<h2>Ownership</h2>
+<p>The software, its name and its design belong to <span data-publisher>Apsara Panel</span>. These terms give you the right to use it, not ownership of it. The software includes open-source components, each of which stays under its own licence.</p>
+
+<h2>Ending</h2>
+<p>You can stop using the software at any time by removing it. Your right to use it ends if you break these terms.</p>
+
+<h2>Changes and the law that applies</h2>
+<p>We may update these terms; the date at the top shows the latest version, and continuing to use the software after a change means you accept it. These terms are governed by the law of <span data-law></span>.</p>
+
+<h2>Contact</h2>
+<p>Questions about these terms: <span data-contact></span>.</p>
+
+</main>
+<footer>
+  <div class="in">
+    <span>Apsara Panel <span data-version></span> · <span data-publisher></span></span>
+    <span><a href="privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="terms.html">Terms</a></span>
+  </div>
+</footer>
+<script src="config.js"></script>
+<script>
+(function () {
+  var c = window.SUPERDEVOPS || {};
+  var set = function (sel, text) { document.querySelectorAll(sel).forEach(function (el) { el.textContent = text; }); };
+  set('[data-version]', c.version || '');
+  set('[data-publisher]', c.publisher || 'Apsara Panel');
+  set('[data-law]', c.governingLaw || 'the country where the publisher is established');
+  document.querySelectorAll('[data-contact]').forEach(function (el) {
+    if (c.contactEmail) { var a = document.createElement('a'); a.href = 'mailto:' + c.contactEmail; a.textContent = c.contactEmail; el.textContent = ''; el.appendChild(a); }
+    else el.textContent = 'the contact address shown on this website';
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+*.log
+*.zip
+.DS_Store
+.env*
+Claude outputs
+data
+dist
+dist-server
+node_modules
+out
+release
+
+# Not part of the source
+ApsaraPanel/
+_to_delete/
+*.bak
+/release.yml

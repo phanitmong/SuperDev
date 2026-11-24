@@ -1,0 +1,31 @@
+@font-face { font-family: "Manrope"; src: url("assets/manrope.woff2") format("woff2"); font-weight: 200 800; font-display: swap; }
+:root { --night: #0a0d26; --deep: #11163a; --line: #2a3166; --ink: #eef0ff; --muted: #a6aed6; --blue: #4a74ff; --violet: #7d5fff; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--night); color: var(--ink); font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 17px; line-height: 1.65; -webkit-font-smoothing: antialiased; }
+a { color: #c3ccff; }
+:focus-visible { outline: 3px solid #9db4ff; outline-offset: 3px; border-radius: 6px; }
+.wrap { width: min(100% - 48px, 760px); margin-inline: auto; }
+.top { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; width: min(100% - 48px, 1180px); margin-inline: auto; }
+.brand { display: flex; align-items: center; gap: 12px; font-weight: 750; font-size: 19px; text-decoration: none; color: var(--ink); letter-spacing: -0.01em; }
+.brand img { width: 36px; height: 36px; border-radius: 9px; }
+.top nav a { color: var(--muted); text-decoration: none; font-size: 15px; margin-left: 26px; }
+.top nav a:hover, .top nav a[aria-current] { color: var(--ink); }
+h1 { font-size: clamp(2rem, 4vw, 2.9rem); line-height: 1.1; letter-spacing: -0.03em; font-weight: 770; margin: 56px 0 10px; }
+.when { color: var(--muted); font-size: 15px; margin: 0 0 12px; }
+.short { background: var(--deep); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; margin: 28px 0 8px; }
+.short p { margin: 0; }
+h2 { font-size: 1.35rem; letter-spacing: -0.015em; font-weight: 730; margin: 46px 0 10px; }
+p, li { color: #d3d8f3; }
+ul { padding-left: 22px; }
+li { margin: 6px 0; }
+li b, p b { color: var(--ink); font-weight: 650; }
+table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 15.5px; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 13.5px; }
+.todo { border-left: 3px solid #ffb648; background: rgba(255, 182, 72, 0.08); padding: 12px 18px; border-radius: 0 12px 12px 0; }
+footer { margin-top: 90px; border-top: 1px solid var(--line); padding: 28px 0 44px; color: var(--muted); font-size: 14.5px; }
+footer .in { width: min(100% - 48px, 1180px); margin-inline: auto; display: flex; gap: 22px; flex-wrap: wrap; justify-content: space-between; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--ink); }
+@media (max-width: 640px) { th:nth-child(3), td:nth-child(3) { display: none; } }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.88em; }

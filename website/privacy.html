@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · Apsara Panel</title>
+<link rel="icon" href="assets/favicon.png">
+<link rel="stylesheet" href="assets/legal.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="index.html"><img src="assets/icon.png" alt="" width="36" height="36">Apsara Panel</a>
+  <nav aria-label="Pages">
+    <a href="index.html#download">Download</a>
+    <a href="privacy.html" aria-current="page">Privacy</a>
+    <a href="terms.html">Terms</a>
+  </nav>
+</header>
+<main class="wrap">
+<h1>Privacy</h1>
+<p class="when">Last updated 23 November 2026</p>
+<div class="short"><p><b>The short version.</b> Apsara Panel runs on your computer and on a team service you run yourself, which talks to your own servers. It does not send your servers' addresses, passwords, files, databases or activity to <span data-publisher>Apsara Panel</span>, and it contains no analytics or advertising.</p></div>
+
+<h2>Who this is from</h2>
+<p>Apsara Panel is published by <span data-publisher>Apsara Panel</span> ("we"). For any question about this page, write to <span data-contact></span>.</p>
+
+<h2>The app</h2>
+<p>The desktop app does not report to us. There is no account with us, no telemetry, no crash reporting and no automatic update check. What the app handles stays in three places that you control:</p>
+<table>
+  <thead><tr><th scope="col">Where</th><th scope="col">What is kept there</th><th scope="col">Who can reach it</th></tr></thead>
+  <tbody>
+    <tr><td><b>Your computer</b></td><td>The address of your team service and the last user name, your window settings, the list of recent tasks with their output, saved queries, and database backups you chose to make.</td><td>People who use that computer account.</td></tr>
+    <tr><td><b>Your team service</b><br>a program you run yourself</td><td>Team accounts (name, role, a hash of the password, the authenticator secret), the shared list of servers and sites with their SSH passwords and keys encrypted, saved Git and database sign-ins encrypted, the audit log (who did what, when, from which address), and recordings of terminal sessions. Files you upload or download pass through it and are removed when the transfer ends.</td><td>Whoever runs the service, and team members according to their role.</td></tr>
+    <tr><td><b>Your servers</b></td><td>What you set up through the app: sites, databases, backups, scheduled jobs, and small settings files and scripts whose names start with <span class="mono">superdevops</span>.</td><td>Whoever has access to those servers.</td></tr>
+  </tbody>
+</table>
+<p>Server passwords and keys never leave your team service. When you work on a server, the service opens the SSH connection itself, in a process of its own for each signed-in person, and opens the database connections you saved the same way. The app on your computer only receives what you look at.</p>
+
+<h2>Services the app contacts when you ask it to</h2>
+<p>These connections are made only after you turn the feature on. What you send them is covered by their own privacy terms, not ours.</p>
+<ul>
+  <li><b>GitHub</b>, when you connect a GitHub account to deploy from a repository. Your team service receives an access token for the repositories you approve and stores it encrypted.</li>
+  <li><b>Google</b>, when you connect Google Drive for backups. Your team service asks Google for the address of the account, to show which one is connected, and for access only to files it uploaded itself. The sign-in permission is stored on the server that uploads the backups.</li>
+  <li><b>S3 storage</b> (for example Amazon S3, Cloudflare R2 or Backblaze B2), when you set up backups to a bucket. Your server uploads the backup files to the bucket you named, with the keys you entered. The keys are stored on that server.</li>
+  <li><b>Telegram</b>, when you set up alerts. The alert text (server name and what happened) is sent to the bot and chat you configured, either by the server itself or through your team service.</li>
+  <li><b>Package repositories and download sites</b>, when you install software on a server. Your server downloads from its distribution's repositories, or, when you choose a version from the project itself, from that project's site (for example postgresql.org, mariadb.org, mysql.com, mongodb.org, redis.io, nodejs.org, getcomposer.org or Docker Hub for container images).</li>
+  <li><b>Let's Encrypt</b> or another certificate authority, when you turn on HTTPS for a site. Your server sends the site's domain name to obtain a certificate.</li>
+</ul>
+
+<h2>This website</h2>
+<p>This website is a set of plain pages. It sets no cookies, has no forms, and uses no analytics, advertising or tracking scripts. Like every website, the company that hosts it records technical details of each request (the address the request came from, the time, the page, and the browser's description of itself) for security and to keep the site running.</p>
+<p>The installers are downloaded from the address shown on the download buttons. If that is GitHub, GitHub handles the download under its own privacy statement.</p>
+
+<h2>When you write to us</h2>
+<p>If you send us a message, we keep your address and what you wrote for as long as it takes to answer and to keep a record of the conversation. We do not use it for anything else and do not pass it on.</p>
+
+<h2>Your choices</h2>
+<ul>
+  <li>Everything the app stores is on equipment you control. Removing the app, the team service's data folder, or the <span class="mono">superdevops</span> files on a server removes it.</li>
+  <li>An administrator of your team service can remove a team account and export the audit log.</li>
+  <li>You can disconnect GitHub, Google Drive, S3 storage and Telegram in the app at any time; you can also withdraw the permission in your GitHub or Google account.</li>
+  <li>To ask what we hold about you from a message you sent us, or to have it deleted, write to <span data-contact></span>.</li>
+</ul>
+
+<h2>Changes</h2>
+<p>If the app starts handling information differently, this page is updated first and the date at the top changes.</p>
+
+</main>
+<footer>
+  <div class="in">
+    <span>Apsara Panel <span data-version></span> · <span data-publisher></span></span>
+    <span><a href="privacy.html">Privacy</a> &nbsp;·&nbsp; <a href="terms.html">Terms</a></span>
+  </div>
+</footer>
+<script src="config.js"></script>
+<script>
+(function () {
+  var c = window.SUPERDEVOPS || {};
+  var set = function (sel, text) { document.querySelectorAll(sel).forEach(function (el) { el.textContent = text; }); };
+  set('[data-version]', c.version || '');
+  set('[data-publisher]', c.publisher || 'Apsara Panel');
+  set('[data-law]', c.governingLaw || 'the country where the publisher is established');
+  document.querySelectorAll('[data-contact]').forEach(function (el) {
+    if (c.contactEmail) { var a = document.createElement('a'); a.href = 'mailto:' + c.contactEmail; a.textContent = c.contactEmail; el.textContent = ''; el.appendChild(a); }
+    else el.textContent = 'the contact address shown on this website';
+  });
+})();
+</script>
+</body>
+</html>
