@@ -7,6 +7,8 @@ name: Release
 on:
   push:
     tags: ['v*']
+    # A push to this branch builds the installers too (artifacts only, no Release).
+    branches: ['build/**']
   workflow_dispatch:
 
 permissions:
