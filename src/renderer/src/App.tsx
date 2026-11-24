@@ -33,7 +33,8 @@ import {
   DesktopOutlined,
   SwapOutlined,
   ThunderboltOutlined,
-  ToolOutlined
+  ToolOutlined,
+  CloudDownloadOutlined
 } from '@ant-design/icons'
 import type { SelectProps } from 'antd'
 import type { ConnState, Project, ServerGroup } from '@shared/types'
@@ -365,6 +366,26 @@ function Shell({ me, biometric, dark, themeMode, setThemeMode }: { me: SessionUs
   const state: ConnState = current ? (states[current.id] ?? 'disconnected') : 'disconnected'
   const flush = page === 'terminal'
 
+  const [appVersion, setAppVersion] = useState('')
+  useEffect(() => {
+    void window.api.update.state().then((u) => setAppVersion(u.current))
+    return window.api.update.onState((u) => setAppVersion(u.current))
+  }, [])
+  const checkUpdates = async (): Promise<void> => {
+    const hide = message.loading('Looking for a new version…', 0)
+    try {
+      const u = await window.api.update.check()
+      hide()
+      if (u.ready) message.success(`Version ${u.available} is ready: use "Restart to update" at the bottom right.`)
+      else if (u.available) message.info(`Version ${u.available} is downloading${u.progress !== undefined ? ` (${u.progress}%)` : ''}.`)
+      else if (u.error) message.warning(u.error)
+      else message.success(`You have the newest version (${u.current}).`)
+    } catch (err) {
+      hide()
+      message.error(errText(err))
+    }
+  }
+
   return (
     <div className={`app ${isMac ? 'is-mac' : ''}`}>
       <aside className="sidebar" style={{ backgroundImage: `linear-gradient(180deg, rgba(15, 19, 66, 0.94) 0%, rgba(22, 18, 86, 0.9) 60%, rgba(40, 24, 110, 0.86) 100%), ${cssUrl(bannerUrl)}` }}>
@@ -372,6 +393,7 @@ function Shell({ me, biometric, dark, themeMode, setThemeMode }: { me: SessionUs
           <div className="brand">
             <img className="brand-icon" src={iconUrl} alt="" />
             Apsara Panel
+            {appVersion && <span className="brand-version" title={`Apsara Panel ${appVersion}`}>v{appVersion}</span>}
           </div>
           <Select
             style={{ width: '100%', marginTop: 16 }}
@@ -431,6 +453,7 @@ function Shell({ me, biometric, dark, themeMode, setThemeMode }: { me: SessionUs
             placement="topLeft"
             menu={{
               items: [
+                { key: 'version', label: `Version ${appVersion || '…'} · Check for updates`, icon: <CloudDownloadOutlined /> },
                 { key: 'roadmap', label: 'Roadmap' },
                 { key: 'password', label: 'Change my password' },
                 ...(biometric ? [{ key: 'lock', label: 'Lock now', icon: <LockOutlined /> }] : []),
@@ -438,6 +461,7 @@ function Shell({ me, biometric, dark, themeMode, setThemeMode }: { me: SessionUs
                 { key: 'logout', label: 'Sign out', icon: <LogoutOutlined /> }
               ],
               onClick: ({ key }) => {
+                if (key === 'version') void checkUpdates()
                 if (key === 'roadmap') setPage('roadmap')
                 if (key === 'password') setChangingPassword(true)
                 if (key === 'lock') void window.api.app.lock().catch((err) => message.error(errText(err)))
