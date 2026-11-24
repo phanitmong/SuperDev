@@ -7,10 +7,10 @@ import type { GdriveOptions, GdriveRemoteFile, GdriveStatus, GoogleConnectStart,
 import { JobDrawer, useJob } from './JobLog'
 import { ago, bytes, errText } from '../util'
 
-type Step = 'loading' | 'setup' | 'ask-admin' | 'code' | 'expired' | 'denied'
+type Step = 'loading' | 'setup' | 'ask-admin' | 'choose' | 'code' | 'expired' | 'denied'
 
 /** Sign in to Google with a short code. The first time, an admin enters the team's Google OAuth client. */
-function GoogleConnect({ open, onClose, onConnected }: { open: boolean; onClose: () => void; onConnected: (email: string) => void }) {
+export function GoogleConnect({ open, onClose, onConnected, team = false }: { open: boolean; onClose: () => void; onConnected: (email: string) => void; /** Connect the team's own account (Team → Integrations). */ team?: boolean }) {
   const { message } = AntApp.useApp()
   const [step, setStep] = useState<Step>('loading')
   const [status, setStatus] = useState<GoogleStatus | null>(null)
@@ -26,7 +26,7 @@ function GoogleConnect({ open, onClose, onConnected }: { open: boolean; onClose:
     setError('')
     setStep('loading')
     try {
-      const f = await window.api.google.connectStart()
+      const f = await window.api.google.connectStart(team)
       if (!alive.current) return
       setFlow(f)
       setStep('code')
@@ -64,7 +64,8 @@ function GoogleConnect({ open, onClose, onConnected }: { open: boolean; onClose:
         if (!alive.current) return
         setStatus(s)
         setClientId(s.clientId ?? '')
-        if (s.configured) void begin()
+        if (s.configured && !team && s.team) setStep('choose')
+        else if (s.configured) void begin()
         else setStep(s.canSetup ? 'setup' : 'ask-admin')
       })
       .catch((err) => {
@@ -91,8 +92,38 @@ function GoogleConnect({ open, onClose, onConnected }: { open: boolean; onClose:
     }
   }
 
+  const useTeam = async (): Promise<void> => {
+    setBusy(true)
+    setError('')
+    try {
+      const r = await window.api.google.useTeam()
+      onConnected(r.email)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
-    <Modal open={open} onCancel={onClose} footer={null} width={560} destroyOnClose maskClosable={false} title={<span><GoogleOutlined /> Connect Google Drive</span>}>
+    <Modal open={open} onCancel={onClose} footer={null} width={560} destroyOnClose maskClosable={false} title={<span><GoogleOutlined /> {team ? 'Connect the team Google account' : 'Connect Google Drive'}</span>}>
+      {step === 'choose' && status?.team && (
+        <>
+          <p className="gh-lead">Which Google account should hold this server's backups?</p>
+          <div className="gd-choice">
+            <button type="button" className="gd-choice-item" disabled={busy} onClick={() => void useTeam()}>
+              <b>The team's account</b>
+              <span className="mono">{status.team.email}</span>
+              <span className="db-hint">Connected by {status.team.by ?? 'an admin'}. No Google sign-in needed.</span>
+            </button>
+            <button type="button" className="gd-choice-item" disabled={busy} onClick={() => void begin()}>
+              <b>Another Google account</b>
+              <span className="db-hint">Sign in to Google with a short code.</span>
+            </button>
+          </div>
+          {error && <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />}
+        </>
+      )}
       {step === 'loading' && (
         <div className="empty" style={{ padding: 30 }}>
           <Spin />

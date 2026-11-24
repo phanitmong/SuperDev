@@ -97,6 +97,16 @@ export interface TeamSettings {
   /** OAuth client (type "TVs and Limited Input devices") for Google Drive backups. Google does not treat this kind of secret as confidential. */
   googleClientId?: string
   googleClientSecret?: string
+  /** The team's own Google account for Drive backups, connected once by an admin. The token is encrypted on the service. */
+  googleTeam?: GoogleTeam
+}
+
+export interface GoogleTeam {
+  email: string
+  /** Google's refresh token. Encrypted at rest; open only in the engines of people who may set up backups. */
+  token: string
+  by?: string
+  at: number
 }
 
 let data: Data | null = null
@@ -449,7 +459,7 @@ export function addDeploy(siteId: string, record: Omit<DeployRecord, 'id' | 'sit
 const SECRET_FIELDS = ['password', 'privateKey', 'passphrase'] as const
 
 /** What a person may see (null = every server), with secrets decrypted for the app to connect with. */
-export function snapshot(userId: string, isAdmin: boolean): Snapshot {
+export function snapshot(userId: string, isAdmin: boolean, mayUseTeamGoogle = isAdmin): Snapshot {
   const d = load()
   const projects = d.projects
     .filter((p) => canUse(p.id, userId, isAdmin))
@@ -465,7 +475,7 @@ export function snapshot(userId: string, isAdmin: boolean): Snapshot {
   const dbconns = d.dbconns.filter((c) => c.shared || c.ownerId === userId).map((c) => ({ ...c, secrets: openSecrets(c.secrets) }))
   // A project shows only the servers this person may use; the others stay in it on the service.
   const groups = d.groups.filter((g) => g.shared || g.ownerId === userId).map((g) => ({ ...g, members: g.members.filter((m) => ids.has(m.projectId)), nfs: g.nfs?.filter((n) => ids.has(n.serverId)) }))
-  return { projects, sites, deploys: d.deploys.filter((r) => siteIds.has(r.siteId)), gits, dbconns, settings: { ...d.settings }, dbsecrets: d.dbsecrets.filter((x) => ids.has(x.projectId)).map((x) => ({ ...x, password: '' })), groups }
+  return { projects, sites, deploys: d.deploys.filter((r) => siteIds.has(r.siteId)), gits, dbconns, settings: openSettings(d.settings, mayUseTeamGoogle), dbsecrets: d.dbsecrets.filter((x) => ids.has(x.projectId)).map((x) => ({ ...x, password: '' })), groups }
 }
 
 function text(v: unknown, max: number): string {
@@ -582,7 +592,15 @@ export function apply(change: StoreChange): void {
   } else if (change.t === 'dbconn-del') {
     d.dbconns = d.dbconns.filter((c) => c.id !== change.id)
   } else if (change.t === 'settings') {
-    d.settings = cleanSettings(change.record)
+    const next = cleanSettings(change.record)
+    if (next.googleTeam) {
+      // The engine holds the token open; on disk it is encrypted. An empty token keeps the one stored for that account.
+      const t = next.googleTeam.token
+      const old = d.settings.googleTeam
+      next.googleTeam.token = t ? (t.startsWith('aes:') ? (old?.token === t ? t : '') : encrypt(t)) : old?.email === next.googleTeam.email ? old.token : ''
+      if (!next.googleTeam.token) next.googleTeam = undefined
+    }
+    d.settings = next
   } else if (change.t === 'dbsecret') {
     const r = change.record
     const projectId = text(r.projectId, 64)
@@ -800,7 +818,19 @@ function cleanSettings(r: TeamSettings | undefined): TeamSettings {
   const gsecret = typeof r?.googleClientSecret === 'string' ? r.googleClientSecret.trim() : ''
   if (gid && !/^[A-Za-z0-9._-]{20,200}$/.test(gid)) throw new Error('That does not look like a Google Client ID. It ends in .apps.googleusercontent.com.')
   if (gsecret && !/^[A-Za-z0-9._-]{8,200}$/.test(gsecret)) throw new Error('That does not look like a Google client secret.')
-  return { githubClientId: id || undefined, googleClientId: gid || undefined, googleClientSecret: gsecret || undefined }
+  const gt = r?.googleTeam
+  const googleTeam: GoogleTeam | undefined =
+    gt && typeof gt.email === 'string' && typeof gt.token === 'string'
+      ? { email: gt.email.trim().slice(0, 200), token: gt.token.trim().slice(0, 4000), by: typeof gt.by === 'string' ? gt.by.slice(0, 100) : undefined, at: Number(gt.at) || Date.now() }
+      : undefined
+  return { githubClientId: id || undefined, googleClientId: gid || undefined, googleClientSecret: gsecret || undefined, googleTeam }
+}
+
+/** Settings for one person's engine: the team Google token only for people who may set up backups. */
+function openSettings(st: TeamSettings, withToken: boolean): TeamSettings {
+  const gt = st.googleTeam
+  if (!gt) return { ...st }
+  return { ...st, googleTeam: { ...gt, token: withToken ? (decrypt(gt.token) ?? '') : '' } }
 }
 
 export function getSettings(): TeamSettings {

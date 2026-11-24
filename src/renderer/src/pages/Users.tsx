@@ -6,6 +6,7 @@ import { ROLE_LABELS, ROLE_SUMMARY } from '@shared/team'
 import type { Project } from '@shared/types'
 import { ago, errText } from '../util'
 import Protection from '../components/Protection'
+import Integrations from '../components/Integrations'
 
 const ROLE_COLOR: Record<Role, string> = { admin: 'red', developer: 'blue', it_support: 'purple', viewer: 'default' }
 const ROLES = Object.keys(ROLE_LABELS) as Role[]
@@ -201,6 +202,8 @@ export default function Users({ me, projects }: { me: SessionUser; projects: Pro
       </div>
 
       <Protection />
+
+      <Integrations />
 
       <div className="card">
         <div className="card-title">What each role can do</div>

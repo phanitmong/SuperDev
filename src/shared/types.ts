@@ -925,6 +925,10 @@ export interface GoogleStatus {
   canSetup: boolean
   /** A Google sign-in approved in this session is waiting to be used. */
   ready?: { email: string }
+  /** A client secret is stored (it is never sent back). */
+  secretSet?: boolean
+  /** The team's own Google account, connected once by an admin. */
+  team?: { email: string; by?: string; at: number }
 }
 
 export interface GoogleConnectStart {

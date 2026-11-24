@@ -393,7 +393,7 @@ const M: Record<string, Def> = {
 // ---------------------------------------------------------------- asked by a person's engine, never by an app
 const INTERNAL: Record<string, Def> = {
   // Everything this person may use, credentials opened. Only ever leaves the service for its own engine process.
-  'store:snapshot': { perm: 'view', quiet: true, run: (u) => store.snapshot(u.id, u.role === 'admin') },
+  'store:snapshot': { perm: 'view', quiet: true, run: (u) => store.snapshot(u.id, u.role === 'admin', can(u.role, 'ops')) },
   'store:apply': {
     perm: 'view',
     quiet: true,

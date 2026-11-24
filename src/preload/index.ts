@@ -345,7 +345,11 @@ const api = {
   google: {
     status: () => invoke<GoogleStatus>('google:status'),
     setup: (clientId: string, clientSecret: string) => invoke<void>('google:setup', clientId, clientSecret),
-    connectStart: () => invoke<GoogleConnectStart>('google:connectStart'),
+    /** team = connect the team's own Google account (admins). */
+    connectStart: (team?: boolean) => invoke<GoogleConnectStart>('google:connectStart', team === true),
+    clear: () => invoke<void>('google:clear'),
+    teamRemove: () => invoke<void>('google:teamRemove'),
+    useTeam: () => invoke<{ email: string }>('google:useTeam'),
     connectPoll: () => invoke<GoogleConnectPoll>('google:connectPoll')
   },
   s3: {

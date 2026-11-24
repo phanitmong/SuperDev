@@ -290,7 +290,7 @@ function gitFor(site: { source: string; gitAccountId?: string }): deploy.GitSign
 }
 
 /** Google sign-ins: one waiting for approval in the browser, and one approved and waiting to be given to a server. Per signed-in user, memory only. */
-const pendingGoogle = new Map<string, { clientId: string; clientSecret: string; deviceCode: string; interval: number; expires: number }>()
+const pendingGoogle = new Map<string, { clientId: string; clientSecret: string; deviceCode: string; interval: number; expires: number; team?: boolean }>()
 const googleGrants = new Map<string, gdrive.GoogleGrant & { until: number }>()
 
 /** A GitHub sign-in waiting for the person to approve it in their browser, per signed-in user. */
@@ -538,29 +538,66 @@ const M: Record<string, Def> = {
     run: (c) => {
       const st = store.getSettings()
       const g = googleGrants.get(c.user.id)
-      return { configured: !!(st.googleClientId && st.googleClientSecret), clientId: st.googleClientId, canSetup: c.user.role === 'admin', ready: g && Date.now() < g.until ? { email: g.email } : undefined }
+      return {
+        configured: !!(st.googleClientId && st.googleClientSecret),
+        clientId: st.googleClientId,
+        secretSet: !!st.googleClientSecret,
+        canSetup: c.user.role === 'admin',
+        ready: g && Date.now() < g.until ? { email: g.email } : undefined,
+        team: st.googleTeam ? { email: st.googleTeam.email, by: st.googleTeam.by, at: st.googleTeam.at } : undefined
+      }
     }
   },
   'google:setup': {
     perm: 'view',
     run: async (c, clientId: string, clientSecret: string) => {
       if (c.user.role !== 'admin') throw new RpcError('Only an admin can set up the Google connection for the team.', 'forbidden')
+      const before = store.getSettings()
       const id = String(clientId ?? '').trim()
-      const secret = String(clientSecret ?? '').trim()
+      // An empty secret keeps the stored one (the settings page never shows it).
+      const secret = String(clientSecret ?? '').trim() || (id === before.googleClientId ? before.googleClientSecret ?? '' : '')
       if (!id || !secret) throw new Error('Paste both the Client ID and the client secret.')
       // Asking Google for a code proves the client exists and may use this kind of sign-in.
       await google.deviceStart(id)
-      store.saveSettings({ googleClientId: id, googleClientSecret: secret })
+      // A team account signed in through another client cannot be refreshed with this one.
+      store.saveSettings({ googleClientId: id, googleClientSecret: secret, ...(id !== before.googleClientId ? { googleTeam: undefined } : {}) })
+    }
+  },
+  'google:clear': {
+    perm: 'view',
+    run: (c) => {
+      if (c.user.role !== 'admin') throw new RpcError('Only an admin can change the Google connection for the team.', 'forbidden')
+      store.saveSettings({ googleClientId: undefined, googleClientSecret: undefined, googleTeam: undefined })
+    }
+  },
+  'google:teamRemove': {
+    perm: 'view',
+    run: (c) => {
+      if (c.user.role !== 'admin') throw new RpcError('Only an admin can change the team Google account.', 'forbidden')
+      store.saveSettings({ googleTeam: undefined })
+    }
+  },
+  // Use the team's Google account for the next Drive set-up, instead of signing in to Google again.
+  'google:useTeam': {
+    perm: 'ops',
+    run: (c) => {
+      const st = store.getSettings()
+      const t = st.googleTeam
+      if (!t || !st.googleClientId || !st.googleClientSecret) throw new Error('The team has no Google account connected. An admin connects one under Team → Integrations.')
+      if (!t.token) throw new Error('Your role cannot use the team Google account.')
+      googleGrants.set(c.user.id, { clientId: st.googleClientId, clientSecret: st.googleClientSecret, refreshToken: t.token, email: t.email, until: Date.now() + 30 * 60 * 1000 })
+      return { email: t.email }
     }
   },
   'google:connectStart': {
     perm: 'ops',
     quiet: true,
-    run: async (c) => {
+    run: async (c, team?: boolean) => {
+      if (team === true && c.user.role !== 'admin') throw new RpcError('Only an admin can connect the team Google account.', 'forbidden')
       const st = store.getSettings()
       if (!st.googleClientId || !st.googleClientSecret) throw new Error('The Google connection has not been set up for this team yet.')
       const d = await google.deviceStart(st.googleClientId)
-      pendingGoogle.set(c.user.id, { clientId: st.googleClientId, clientSecret: st.googleClientSecret, deviceCode: d.deviceCode, interval: d.interval, expires: Date.now() + d.expiresIn * 1000 })
+      pendingGoogle.set(c.user.id, { clientId: st.googleClientId, clientSecret: st.googleClientSecret, deviceCode: d.deviceCode, interval: d.interval, expires: Date.now() + d.expiresIn * 1000, team: team === true })
       return { userCode: d.userCode, verificationUrl: d.verificationUrl, expiresIn: d.expiresIn, interval: d.interval }
     }
   },
@@ -580,6 +617,12 @@ const M: Record<string, Def> = {
       }
       pendingGoogle.delete(c.user.id)
       if (r.state !== 'done') return { state: r.state }
+      if (p.team) {
+        // Kept by the service (encrypted) for every server's Drive set-up. It never goes to the window.
+        store.saveSettings({ googleTeam: { email: r.email, token: r.refreshToken, by: c.user.username, at: Date.now() } })
+        deps.report({ action: 'google:teamConnect', target: `team Google account ${r.email || '(address not given)'}`, ok: true })
+        return { state: 'done', email: r.email }
+      }
       // Held in this app's memory for a short while, then handed to the server being set up. It never goes to the window.
       googleGrants.set(c.user.id, { clientId: p.clientId, clientSecret: p.clientSecret, refreshToken: r.refreshToken, email: r.email, until: Date.now() + 30 * 60 * 1000 })
       deps.report({ action: 'google:connect', target: `Google account ${r.email || '(address not given)'}`, ok: true })
