@@ -44,7 +44,7 @@ jobs:
           if [ -n "$SIGN_APPLE_ID" ]; then export APPLE_ID="$SIGN_APPLE_ID" APPLE_APP_SPECIFIC_PASSWORD="$SIGN_APPLE_PASSWORD" APPLE_TEAM_ID="$SIGN_APPLE_TEAM_ID"; fi
           npm run ${{ matrix.script }}
         env:
-          SIGN_CSC_LINK: ${{ secrets.CSC_LINK }}
+          SIGN_CSC_LINK: ${{ secrets.CSC_LINK || secrets.APSARA_CERT }}
           SIGN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           SIGN_APPLE_ID: ${{ secrets.APPLE_ID }}
           SIGN_APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
