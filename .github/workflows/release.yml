@@ -40,8 +40,24 @@ jobs:
       - name: Build installers
         shell: bash
         run: |
-          if [ -n "$SIGN_CSC_LINK" ]; then export CSC_LINK="$SIGN_CSC_LINK" CSC_KEY_PASSWORD="$SIGN_CSC_KEY_PASSWORD"; else export CSC_IDENTITY_AUTO_DISCOVERY=false; fi
-          if [ -n "$SIGN_APPLE_ID" ]; then export APPLE_ID="$SIGN_APPLE_ID" APPLE_APP_SPECIFIC_PASSWORD="$SIGN_APPLE_PASSWORD" APPLE_TEAM_ID="$SIGN_APPLE_TEAM_ID"; fi
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$SIGN_CSC_LINK" ]; then
+            # Put the Developer ID certificate in a keychain of its own; electron-builder then finds it by itself.
+            KP=$(openssl rand -hex 24)
+            security create-keychain -p "$KP" build.keychain
+            security set-keychain-settings -lut 21600 build.keychain
+            security unlock-keychain -p "$KP" build.keychain
+            echo "$SIGN_CSC_LINK" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+            security import "$RUNNER_TEMP/cert.p12" -k build.keychain -P "$SIGN_CSC_KEY_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security -T /usr/bin/productbuild
+            rm -f "$RUNNER_TEMP/cert.p12"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" build.keychain >/dev/null
+            security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
+            security find-identity -v -p codesigning build.keychain | grep -c "Developer ID Application" | sed 's/^/Developer ID certificates found: /'
+            export CSC_KEYCHAIN=build.keychain
+            if [ -n "$SIGN_APPLE_ID" ]; then export APPLE_ID="$SIGN_APPLE_ID" APPLE_APP_SPECIFIC_PASSWORD="$SIGN_APPLE_PASSWORD" APPLE_TEAM_ID="$SIGN_APPLE_TEAM_ID"; fi
+          else
+            # Windows and Linux are not signed (no certificate for them); the Mac without a certificate is signed ad hoc.
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
           npm run ${{ matrix.script }}
         env:
           SIGN_CSC_LINK: ${{ secrets.CSC_LINK || secrets.APSARA_CERT }}
