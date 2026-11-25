@@ -40,7 +40,7 @@ jobs:
       - name: Build installers
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$SIGN_CSC_LINK" ]; then
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$SIGN_CSC_LINK" ] && [ "$MAC_SIGN" = "true" ]; then
             # Put the Developer ID certificate in a keychain of its own; electron-builder then finds it by itself.
             KP=$(openssl rand -hex 24)
             security create-keychain -p "$KP" build.keychain
@@ -67,6 +67,7 @@ jobs:
           npm run ${{ matrix.script }}
         env:
           SIGN_CSC_LINK: ${{ secrets.CSC_LINK || secrets.APSARA_CERT }}
+          MAC_SIGN: ${{ vars.MAC_SIGN }}
           SIGN_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           SIGN_APPLE_ID: ${{ secrets.APPLE_ID }}
           SIGN_APPLE_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
