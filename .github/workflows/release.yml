@@ -51,7 +51,12 @@ jobs:
             rm -f "$RUNNER_TEMP/cert.p12"
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KP" build.keychain >/dev/null
             security list-keychains -d user -s build.keychain $(security list-keychains -d user | tr -d '"')
-            security find-identity -v -p codesigning build.keychain | grep -c "Developer ID Application" | sed 's/^/Developer ID certificates found: /'
+            echo "Signing identities in the certificate:"; security find-identity -p codesigning build.keychain | sed -E 's/[0-9A-F]{40}/<hash>/' || true
+            echo "Certificates in the file:"; security find-certificate -a build.keychain | grep -E '"labl"' || true
+            if ! security find-identity -v -p codesigning build.keychain | grep -q "Developer ID Application"; then
+              echo "::error::The certificate secret has no 'Developer ID Application' certificate with its private key. Export it again from Keychain Access (My Certificates, with the key under it) as .p12."
+              exit 1
+            fi
             export CSC_KEYCHAIN=build.keychain
             if [ -n "$SIGN_APPLE_ID" ]; then export APPLE_ID="$SIGN_APPLE_ID" APPLE_APP_SPECIFIC_PASSWORD="$SIGN_APPLE_PASSWORD" APPLE_TEAM_ID="$SIGN_APPLE_TEAM_ID"; fi
           else
