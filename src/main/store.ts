@@ -179,6 +179,12 @@ function load(): Data {
   try {
     const parsed = JSON.parse(readFileSync(file(), 'utf8')) as Data
     data = { version: 1, projects: parsed.projects ?? [], sites: parsed.sites ?? [], deploys: parsed.deploys ?? [], gits: parsed.gits ?? [], dbconns: parsed.dbconns ?? [], settings: parsed.settings ?? {}, dbsecrets: parsed.dbsecrets ?? [], groups: parsed.groups ?? [] }
+    // Files from before the Google client secret was encrypted: encrypt it now.
+    const gs = data.settings.googleClientSecret
+    if (gs && !gs.startsWith('aes:')) {
+      data.settings = { ...data.settings, googleClientSecret: encrypt(gs) }
+      persist()
+    }
   } catch {
     data = { version: 1, projects: [], sites: [], deploys: [], gits: [], dbconns: [], settings: {}, dbsecrets: [], groups: [] }
   }
@@ -593,6 +599,9 @@ export function apply(change: StoreChange): void {
     d.dbconns = d.dbconns.filter((c) => c.id !== change.id)
   } else if (change.t === 'settings') {
     const next = cleanSettings(change.record)
+    // The client secret is kept encrypted, like the team token. The same encrypted text (from a person who may not open it) stays as it is.
+    if (next.googleClientSecret && !next.googleClientSecret.startsWith('aes:')) next.googleClientSecret = encrypt(next.googleClientSecret)
+    else if (next.googleClientSecret && next.googleClientSecret !== d.settings.googleClientSecret) next.googleClientSecret = d.settings.googleClientSecret
     if (next.googleTeam) {
       // The engine holds the token open; on disk it is encrypted. An empty token keeps the one stored for that account.
       const t = next.googleTeam.token
@@ -828,9 +837,13 @@ function cleanSettings(r: TeamSettings | undefined): TeamSettings {
 
 /** Settings for one person's engine: the team Google token only for people who may set up backups. */
 function openSettings(st: TeamSettings, withToken: boolean): TeamSettings {
+  const out: TeamSettings = { ...st }
+  // People who may set up Drive get the client secret open; others only see that one is set.
+  const gs = st.googleClientSecret
+  if (gs?.startsWith('aes:')) out.googleClientSecret = withToken ? (decrypt(gs) ?? '') || undefined : gs
   const gt = st.googleTeam
-  if (!gt) return { ...st }
-  return { ...st, googleTeam: { ...gt, token: withToken ? (decrypt(gt.token) ?? '') : '' } }
+  if (gt) out.googleTeam = { ...gt, token: withToken ? (decrypt(gt.token) ?? '') : '' }
+  return out
 }
 
 export function getSettings(): TeamSettings {

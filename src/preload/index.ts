@@ -472,7 +472,7 @@ const api = {
     save: (id: string, program: SupervisorProgramInput) => invoke<void>('supervisor:save', id, program),
     action: (id: string, name: string, what: 'start' | 'stop' | 'restart') => invoke<void>('supervisor:action', id, name, what),
     remove: (id: string, name: string) => invoke<void>('supervisor:remove', id, name),
-    logs: (id: string, name: string) => invoke<string>('supervisor:logs', id, name)
+    logs: (id: string, name: string, stream: 'stdout' | 'stderr' = 'stdout', lines = 300) => invoke<string>('supervisor:logs', id, name, stream, lines)
   },
   apps: {
     /** Only runs right after session.confirm. The program is removed; data and settings stay. */

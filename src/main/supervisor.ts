@@ -198,9 +198,36 @@ echo removed`
   await runPrivileged(client, script, sudo, undefined, 90000)
 }
 
-/** The end of a program's own output. */
-export async function logs(client: Client, sudo: Sudo, name: string): Promise<string> {
-  if (!RE_NAME.test(String(name))) throw new Error('Unknown program.')
-  const res = await runPrivileged(client, `F=/var/log/supervisor/superdevops-${name}.log; if [ -f "$F" ]; then tail -n 300 "$F"; else echo "(no output yet)"; fi`, sudo, undefined, 30000)
+// Programs made outside this app can have any name Supervisor accepts.
+const RE_ANY = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/
+
+/**
+ * The end of a program's output, for any program Supervisor runs (made here or not).
+ * stream: stdout or stderr (a program with redirect_stderr has everything in stdout).
+ * Several processes (numprocs > 1) are shown one after the other.
+ */
+export async function logs(client: Client, sudo: Sudo, name: string, stream: 'stdout' | 'stderr' = 'stdout', lines = 300): Promise<string> {
+  if (!RE_ANY.test(String(name))) throw new Error('Unknown program.')
+  const which = stream === 'stderr' ? 'stderr' : 'stdout'
+  const n = Math.min(Math.max(Math.floor(Number(lines)) || 300, 20), 5000)
+  const script = `${PRELUDE}
+N=${shq(name)}
+PROCS=$(supervisorctl status 2>/dev/null | awk '{print $1}' | grep -E "^$N(:|\$)" || true)
+if [ -z "$PROCS" ]; then
+  F=/var/log/supervisor/superdevops-$N.log
+  if [ "${which}" = stdout ] && [ -f "$F" ]; then tail -n ${n} "$F"; else echo "(Supervisor does not run $N right now, so there is no output to show.)"; fi
+  exit 0
+fi
+COUNT=$(echo "$PROCS" | wc -l)
+for P in $PROCS; do
+  [ "$COUNT" -gt 1 ] && echo "===== $P ====="
+  OUT=$(supervisorctl tail -$((${n} * 400)) "$P" ${which} 2>&1)
+  case "$OUT" in
+    *"ERROR (no log file)"*|*"No such file"*) if [ "${which}" = stderr ]; then echo "(No separate error log: this program writes its errors into the normal output.)"; else echo "(This program keeps no output log.)"; fi ;;
+    "") echo "(no output yet)" ;;
+    *) printf '%s\n' "$OUT" | tail -n ${n} ;;
+  esac
+done`
+  const res = await runPrivileged(client, script, sudo, undefined, 30000)
   return res.stdout
 }

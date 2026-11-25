@@ -3,6 +3,7 @@ import { Alert, App as AntApp, Button, Form, Input, InputNumber, Modal, Space, S
 import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { Project, SupervisorOverview, SupervisorProgram, SupervisorProgramInput } from '@shared/types'
 import FolderInput from '../components/FolderPicker'
+import SupervisorLog from '../components/SupervisorLog'
 import { JobDrawer, useJob } from '../components/JobLog'
 import { errText } from '../util'
 
@@ -71,13 +72,6 @@ export default function SupervisorPage({ project, canOps }: { project: Project; 
     await load()
   }
 
-  const showLog = async (name: string): Promise<void> => {
-    try {
-      setLog({ name, text: await window.api.supervisor.logs(project.id, name) })
-    } catch (err) {
-      message.error(errText(err), 8)
-    }
-  }
 
   if (error) {
     return (
@@ -149,9 +143,12 @@ export default function SupervisorPage({ project, canOps }: { project: Project; 
             {
               title: '',
               align: 'right',
-              render: (_, p) =>
-                canOps && (
+              render: (_, p) => (
                   <Space wrap>
+                    <Button size="small" onClick={() => setLog({ name: p.name, text: '' })}>
+                      Log
+                    </Button>
+                    {canOps && (<>
                     {p.state === 'RUNNING' || p.state === 'PARTLY' || p.state === 'STARTING' || p.state === 'BACKOFF' ? (
                       <>
                         <Button size="small" loading={busy === `${p.name}:restart`} onClick={() => void act(`${p.name}:restart`, () => window.api.supervisor.action(project.id, p.name, 'restart'), `${p.name} restarted`)}>
@@ -168,9 +165,6 @@ export default function SupervisorPage({ project, canOps }: { project: Project; 
                     )}
                     {p.managed && (
                       <>
-                        <Button size="small" onClick={() => void showLog(p.name)}>
-                          Output
-                        </Button>
                         <Button size="small" onClick={() => open(p)}>
                           Edit
                         </Button>
@@ -191,6 +185,7 @@ export default function SupervisorPage({ project, canOps }: { project: Project; 
                         </Button>
                       </>
                     )}
+                    </>)}
                   </Space>
                 )
             }
@@ -223,9 +218,7 @@ export default function SupervisorPage({ project, canOps }: { project: Project; 
         </Form>
       </Modal>
 
-      <Modal open={!!log} title={`Output of ${log?.name ?? ''}`} footer={<Space><Button onClick={() => log && void showLog(log.name)}>Read again</Button><Button type="primary" onClick={() => setLog(null)}>Close</Button></Space>} onCancel={() => setLog(null)} width={820} destroyOnClose>
-        <pre className="mono" style={{ maxHeight: 460, overflow: 'auto', fontSize: 12, margin: 0, whiteSpace: 'pre-wrap' }}>{log?.text}</pre>
-      </Modal>
+      {log && <SupervisorLog projectId={project.id} name={log.name} onClose={() => setLog(null)} />}
       <JobDrawer job={job} />
     </div>
   )

@@ -1314,7 +1314,12 @@ const M: Record<string, Def> = {
   'supervisor:save': { perm: 'ops', scope: 'project', run: async (_c, id: string, program: SupervisorProgramInput) => supervisor.saveProgram((await on(id)).client, sudoFor(id), program) },
   'supervisor:action': { perm: 'ops', scope: 'project', run: async (_c, id: string, name: string, what: 'start' | 'stop' | 'restart') => supervisor.action((await on(id)).client, sudoFor(id), name, what) },
   'supervisor:remove': { perm: 'ops', scope: 'project', run: async (_c, id: string, name: string) => supervisor.removeProgram((await on(id)).client, sudoFor(id), name) },
-  'supervisor:logs': { perm: 'view', scope: 'project', quiet: true, run: async (_c, id: string, name: string) => supervisor.logs((await on(id)).client, sudoFor(id), name) },
+  'supervisor:logs': {
+    perm: 'view',
+    scope: 'project',
+    quiet: true,
+    run: async (_c, id: string, name: string, stream?: 'stdout' | 'stderr', lines?: number) => supervisor.logs((await on(id)).client, sudoFor(id), name, stream === 'stderr' ? 'stderr' : 'stdout', Number(lines) || 300)
+  },
 
   // PostgreSQL
   'mongo:overview': { perm: 'view', scope: 'project', quiet: true, run: async (_c, id: string) => mongo.overview((await on(id)).client, sudoFor(id)) },

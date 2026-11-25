@@ -23,7 +23,7 @@ import { createServer as createHttps } from 'node:https'
 import { join, resolve } from 'node:path'
 import { WebSocketServer, type WebSocket } from 'ws'
 import { can } from '@shared/team'
-import { configureStore } from '../main/store'
+import { configureStore, getSettings } from '../main/store'
 import * as storeApi from '../main/store'
 import * as auth from './auth'
 import * as audit from './audit'
@@ -67,6 +67,8 @@ function setup(): void {
     return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8')
   }
   configureStore({ dir: DATA, encrypt, decrypt })
+  // Read the store once at start, so an old file gets its Google client secret encrypted straight away.
+  getSettings()
   auth.configureAuth({ dir: DATA, encrypt, decrypt })
   audit.configureAudit(DATA)
   guard.configureGuard({ dir: DATA, encrypt, decrypt })
