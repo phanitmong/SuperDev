@@ -25,7 +25,7 @@ import {
 } from '@ant-design/icons'
 import type { FileEntry, FileListing, Project, TrashEntry } from '@shared/types'
 import { JobDrawer, useJob } from '../components/JobLog'
-import { MAX_EDIT_BYTES } from '@shared/types'
+import { IMAGE_FILE_RE, MAX_EDIT_BYTES, MAX_IMAGE_BYTES } from '@shared/types'
 import { bytes, errText } from '../util'
 import CodeWorkspace from '../components/CodeWorkspace'
 import { fileIconUrl } from '../fileIcons'
@@ -224,8 +224,9 @@ export default function Files({ project, projects, canSend: maySend, full, dark,
   }
 
   const openFile = async (e: FileEntry): Promise<void> => {
-    if (e.size > MAX_EDIT_BYTES) {
-      message.info(`This file is larger than ${MAX_EDIT_BYTES / 1048576} MB. Download it to read or edit it.`)
+    const limit = IMAGE_FILE_RE.test(e.name) ? MAX_IMAGE_BYTES : MAX_EDIT_BYTES
+    if (e.size > limit) {
+      message.info(`This file is larger than ${limit / 1048576} MB. Download it to open it.`)
       return
     }
     setWs({ root: cwd, open: join(cwd, e.name) })

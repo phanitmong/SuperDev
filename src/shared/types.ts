@@ -649,6 +649,20 @@ export interface DeployRecord {
 // ---------------------------------------------------------------- file manager
 /** Largest text file the built-in editor opens. */
 export const MAX_EDIT_BYTES = 2 * 1024 * 1024
+/** Largest image the editor will show as a picture. */
+export const MAX_IMAGE_BYTES = 15 * 1024 * 1024
+/** Files shown as a picture instead of text. */
+export const IMAGE_FILE_RE = /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif)$/i
+
+export interface FileImage {
+  path: string
+  /** data: URL of the picture. */
+  url: string
+  size: number
+  mode: string
+  owner: string
+  group: string
+}
 
 export interface FileEntry {
   name: string

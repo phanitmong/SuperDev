@@ -1205,6 +1205,7 @@ const M: Record<string, Def> = {
   'files:size': { perm: FILES, scope: 'project', quiet: true, run: async (c, id: string, path: string) => files.size(await fileCtx(c.user, id), path) },
   // Opening a file is logged: it may hold passwords or keys.
   'files:read': { perm: FILES, scope: 'project', run: async (c, id: string, path: string) => files.read(await fileCtx(c.user, id), path) },
+  'files:image': { perm: FILES, scope: 'project', run: async (c, id: string, path: string) => files.readImage(await fileCtx(c.user, id), path) },
   'files:write': { perm: FILES, scope: 'project', run: async (c, id: string, path: string, content: string, version?: string) => files.write(await fileCtx(c.user, id), path, content, version) },
   'files:search': {
     perm: FILES,

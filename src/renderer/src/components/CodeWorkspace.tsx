@@ -29,7 +29,7 @@ import { indentWithTab } from '@codemirror/commands'
 import { gotoLine, openSearchPanel } from '@codemirror/search'
 import { oneDark } from '@codemirror/theme-one-dark'
 import type { FileEntry, FileSearchResult } from '@shared/types'
-import { MAX_EDIT_BYTES } from '@shared/types'
+import { IMAGE_FILE_RE, MAX_EDIT_BYTES, MAX_IMAGE_BYTES } from '@shared/types'
 import { languageOf, lightTheme } from './CodeEditor'
 import { fileIconUrl } from '../fileIcons'
 import { bytes, errText } from '../util'
@@ -72,6 +72,9 @@ interface Tab {
   dirty: boolean
   saving: boolean
   lang?: string
+  /** A picture shown instead of the editor: its data: URL and size. */
+  image?: string
+  size?: number
 }
 
 interface Prefs {
@@ -241,6 +244,11 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
     if (!v) return
     const current = activeRef.current
     if (current && current !== path && states.current.has(current)) states.current.set(current, v.state)
+    if (tabsRef.current.find((t) => t.path === path)?.image) {
+      activeRef.current = path
+      setActive(path)
+      return
+    }
     const st = states.current.get(path)
     if (!st) return
     activeRef.current = path
@@ -258,9 +266,17 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
   }
 
   const openFile = async (path: string, line?: number): Promise<void> => {
-    if (states.current.has(path)) return show(path, line)
+    if (states.current.has(path) || tabsRef.current.some((t) => t.path === path)) return show(path, line)
     setOpening(path)
     try {
+      if (IMAGE_FILE_RE.test(path)) {
+        const img = await window.api.files.image(projectId, path)
+        const t: Tab = { path, version: '', mode: img.mode, owner: img.owner, group: img.group, crlf: false, dirty: false, saving: false, image: img.url, size: img.size }
+        tabsRef.current = [...tabsRef.current, t]
+        setTabs((ts) => [...ts, t])
+        show(path)
+        return
+      }
       const f = await window.api.files.read(projectId, path)
       const crlf = f.content.includes('\r\n')
       states.current.set(path, EditorState.create({ doc: f.content, extensions: baseExtensions(path, crlf) }))
@@ -287,6 +303,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
   const saveTab = async (path: string): Promise<boolean> => {
     const tab = tabsRef.current.find((t) => t.path === path)
     if (!tab || tab.saving) return false
+    if (tab.image) return true
     setTabs((ts) => ts.map((t) => (t.path === path ? { ...t, saving: true } : t)))
     try {
       const version = await window.api.files.write(projectId, path, textOf(path), tab.version)
@@ -441,7 +458,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
               </div>
             )
           }
-          const big = e.size > MAX_EDIT_BYTES
+          const big = e.size > (IMAGE_FILE_RE.test(e.name) ? MAX_IMAGE_BYTES : MAX_EDIT_BYTES)
           return (
             <button
               key={path}
@@ -451,7 +468,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
               title={big ? `${path} · ${bytes(e.size)}, too large to edit here` : `${path} · ${bytes(e.size)}`}
               onClick={() => {
                 setTarget(dir)
-                if (big) message.info(`${e.name} is larger than ${MAX_EDIT_BYTES / 1048576} MB. Download it from Files to edit it.`)
+                if (big) message.info(`${e.name} is too large to open here. Download it from Files.`)
                 else void openFile(path)
               }}
             >
@@ -467,6 +484,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
   }
 
   const tab = tabs.find((t) => t.path === active)
+  const editTab = tab && !tab.image ? tab : undefined
   const lang = tab ? language(tab.path, tab.lang).label : ''
   const dirtyCount = tabs.filter((t) => t.dirty).length
 
@@ -488,13 +506,13 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
           </Tooltip>
           <span className="ws-sep" />
           <Tooltip title={`Find (${isMac ? '⌘' : 'Ctrl+'}F)`}>
-            <Button size="small" icon={<SearchOutlined />} disabled={!tab} aria-label="Find" onClick={() => view.current && openSearchPanel(view.current)} />
+            <Button size="small" icon={<SearchOutlined />} disabled={!editTab} aria-label="Find" onClick={() => view.current && openSearchPanel(view.current)} />
           </Tooltip>
           <Tooltip title="Find and replace">
             <Button
               size="small"
               icon={<SwapOutlined />}
-              disabled={!tab}
+              disabled={!editTab}
               aria-label="Replace"
               onClick={() => {
                 if (!view.current) return
@@ -504,7 +522,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
             />
           </Tooltip>
           <Tooltip title={`Go to line (${isMac ? '⌥⌘' : 'Ctrl+Alt+'}G)`}>
-            <Button size="small" icon={<NumberOutlined />} disabled={!tab} aria-label="Go to line" onClick={() => view.current && gotoLine(view.current)} />
+            <Button size="small" icon={<NumberOutlined />} disabled={!editTab} aria-label="Go to line" onClick={() => view.current && gotoLine(view.current)} />
           </Tooltip>
           <span className="ws-sep" />
           <Tooltip title="Smaller text">
@@ -517,7 +535,7 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
           <Checkbox checked={prefs.wrap} onChange={(e) => setPrefs((p) => ({ ...p, wrap: e.target.checked }))}>
             Wrap lines
           </Checkbox>
-          <Select size="small" style={{ width: 140 }} value={lang || undefined} placeholder="Language" disabled={!tab} onChange={setLanguage} options={LANGUAGES.map(([l]) => ({ value: l, label: l }))} aria-label="Language" />
+          <Select size="small" style={{ width: 140 }} value={lang || undefined} placeholder="Language" disabled={!editTab} onChange={setLanguage} options={LANGUAGES.map(([l]) => ({ value: l, label: l }))} aria-label="Language" />
           <span className="ws-sep" />
           <Button size="small" icon={<CloseOutlined />} onClick={closeAll}>
             Close
@@ -630,7 +648,12 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
             ))}
           </div>
           <div className="ws-editor-wrap">
-            <div ref={host} className="ws-editor" style={{ visibility: tab ? 'visible' : 'hidden' }} />
+            <div ref={host} className="ws-editor" style={{ visibility: editTab ? 'visible' : 'hidden' }} />
+            {tab?.image && (
+              <div className="ws-image">
+                <img src={tab.image} alt={baseName(tab.path)} draggable={false} />
+              </div>
+            )}
             {!tab && (
               <div className="ws-empty">
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Open a file from the tree, or search across files." />
@@ -638,7 +661,16 @@ export default function CodeWorkspace({ projectId, root: startRoot, openPath, da
             )}
           </div>
           <div className="ws-status">
-            {tab ? (
+            {tab?.image ? (
+              <>
+                <span>Picture</span>
+                <span>{bytes(tab.size ?? 0)}</span>
+                <span>
+                  {tab.mode} {tab.owner}:{tab.group}
+                </span>
+                <span className="mono ws-status-path">{tab.path}</span>
+              </>
+            ) : tab ? (
               <>
                 <span>{lang}</span>
                 <span>

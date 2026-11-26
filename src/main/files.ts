@@ -3,8 +3,8 @@
 // user cannot touch. `root` confines a caller to one folder tree.
 import type { Client } from 'ssh2'
 import { posix } from 'node:path'
-import type { FileEntry, FileListing, FileSearchHit, FileSearchResult, FileText, TrashEntry } from '@shared/types'
-import { MAX_EDIT_BYTES } from '@shared/types'
+import type { FileEntry, FileImage, FileListing, FileSearchHit, FileSearchResult, FileText, TrashEntry } from '@shared/types'
+import { MAX_EDIT_BYTES, MAX_IMAGE_BYTES } from '@shared/types'
 import { openSftp, shq, uploadFile, writeRemoteTemp } from './ssh'
 import { runPrivileged, type Sudo } from './deploy'
 
@@ -143,6 +143,35 @@ base64 -w0 -- "$W"
   if (data.includes(0)) throw new Error('This looks like a binary file, so it cannot be edited as text. Download it instead.')
   const [mode, owner, group] = out.slice(nl1 + 1, nl2).split(' ')
   return { path: out.slice(nl2 + 1, nl3), content: data.toString('utf8'), version: out.slice(0, nl1), mode, owner, group }
+}
+
+const IMAGE_MIME: Record<string, string> = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', ico: 'image/x-icon', bmp: 'image/bmp', avif: 'image/avif' }
+
+/** An image file as a data: URL, so the editor can show it. */
+export async function readImage(ctx: FileCtx, path: string): Promise<FileImage> {
+  const ext = (cleanPath(path).split('.').pop() ?? '').toLowerCase()
+  const mime = IMAGE_MIME[ext]
+  if (!mime) throw new Error('Only pictures (png, jpg, gif, webp, svg, ico, bmp, avif) can be previewed.')
+  const out = await run(
+    ctx,
+    `
+whole ${shq(cleanPath(path))}
+[ -d "$W" ] && die "That is a folder, not a file."
+[ -f "$W" ] || die "That file does not exist."
+S=$(stat -c %s -- "$W")
+[ "$S" -gt ${MAX_IMAGE_BYTES} ] && die "This picture is larger than ${MAX_IMAGE_BYTES / 1048576} MB. Download it to view it."
+printf '%s\\n' "$S"
+stat -c '%a %U %G' -- "$W"
+printf '%s\\n' "$W"
+base64 -w0 -- "$W"
+`,
+    120000
+  )
+  const nl1 = out.indexOf('\n')
+  const nl2 = out.indexOf('\n', nl1 + 1)
+  const nl3 = out.indexOf('\n', nl2 + 1)
+  const [mode, owner, group] = out.slice(nl1 + 1, nl2).split(' ')
+  return { path: out.slice(nl2 + 1, nl3), url: `data:${mime};base64,${out.slice(nl3 + 1).trim()}`, size: Number(out.slice(0, nl1)) || 0, mode, owner, group }
 }
 
 const SEARCH_LIMIT = 500
